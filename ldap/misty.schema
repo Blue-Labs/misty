@@ -1,0 +1,212 @@
+# this file goes in /etc/openldap/schema/
+
+## this is a registered OID, if you modify the number, please
+## use a different Name
+# objectIdentifier BlueLabs            1.3.6.1.4.1.47634
+
+objectIdentifier mistyLDAP              BlueLabs:2
+
+objectIdentifier mistyNodes             mistyLDAP:2
+objectIdentifier mistyZones             mistyLDAP:3
+
+objectIdentifier mistyNodesAttributeType  mistyNodes:1
+objectIdentifier mistyNodesObjectClass    mistyNodes:2
+
+objectIdentifier mistyZonesAttributeType  mistyZones:1
+objectIdentifier mistyZonesObjectClass    mistyZones:2
+
+# Nodes
+attributetype ( mistyNodesAttributeType:1.2017.2.28.1
+  NAME 'pi-node'
+  DESC 'A RaspberryPi node managing zones'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyNodesAttributeType:1.2017.2.28.2
+  NAME 'node-description'
+  DESC 'Node description'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyNodesAttributeType:1.2017.2.28.3
+  NAME 'manager-user'
+  DESC 'User authorized to make changes on this node'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  )
+
+attributetype ( mistyNodesAttributeType:1.2017.2.28.4
+  NAME 'viewer-user'
+  DESC 'User only permitted to view objects on this node'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  )
+
+objectClass ( mistyNodesObjectClass:1.2016.5.11.1
+  NAME 'mistyNode'
+  DESC 'Misty Nodes'
+  STRUCTURAL
+  MUST ( pi-node $ node-description )
+  MAY ( manager-user $ viewer-user )
+  )
+
+
+# Zones
+# up to 256c utf8 usernames
+attributetype ( mistyZonesAttributeType:1.2016.5.11.1
+  NAME 'zone'
+  DESC 'Numeric zone ID'
+  EQUALITY numericStringMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.36
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.2
+  NAME 'wire-id'
+  DESC 'Wire ID connected to logical zone ID'
+  EQUALITY numericStringMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.36
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.3
+  NAME 'zone-description'
+  DESC 'Zone description'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.4
+  NAME 'enabled'
+  DESC 'Zone enabled'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.5
+  NAME 'programmed'
+  DESC 'Zone programmed'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.6
+  NAME 'running'
+  DESC 'Zone running'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.7
+  NAME 'manual-on'
+  DESC 'Zone manually turned on'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.8
+  NAME 'manual-end-time'
+  DESC 'End time of Zone manually turned on'
+  EQUALITY generalizedTimeMatch
+  ORDERING generalizedTimeOrderingMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.24
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.9
+  NAME 'mode'
+  DESC 'Zone operational mode'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.10
+  NAME 'follows'
+  DESC 'Parent this zone follows when chained'
+  EQUALITY numericStringMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.36
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.11
+  NAME 'trigger-type'
+  DESC 'Zone trigger type'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.12
+  NAME 'trigger'
+  DESC 'Zone trigger'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.13
+  NAME 'epoch'
+  DESC 'Zone epoch'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.14
+  NAME 'duration-type'
+  DESC 'Zone duration type'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.15
+  NAME 'duration'
+  DESC 'Zone duration'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.16
+  NAME 'suspend-on'
+  DESC 'Zone manually suspended'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.17
+  NAME 'suspend-end-time'
+  DESC 'End time of Zone manually suspended'
+  EQUALITY generalizedTimeMatch
+  ORDERING generalizedTimeOrderingMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.24
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.18
+  NAME 'logic-state-when-active'
+  DESC 'Describes the signal level needed to activate this zone, TRUE=high(5v), FALSE=low(0v)'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( mistyZonesAttributeType:1.2016.5.11.19
+  NAME 'digital-in'
+  DESC 'Channels are GPIO.OUT by default, boolean TRUE makes this channel GPIO.IN'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+objectClass ( mistyZonesObjectClass:1.2016.5.11.1
+  NAME 'mistyZone'
+  DESC 'Misty Zones'
+  STRUCTURAL
+  MUST ( zone $ wire-id $ zone-description $ enabled $ programmed $ running
+         $ mode $ trigger-type $ trigger $ duration-type $ duration $ pi-node )
+  MAY ( manual-on $ manual-end-time $ follows $ epoch $ suspend-on
+         $ suspend-end-time $ logic-state-when-active $ digital-in )
+  )

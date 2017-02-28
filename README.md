@@ -1,15 +1,19 @@
 # Misty
-All examples in this project will use the hostname `misty.blue-labs.org' and
-the realm `misty'. My web content is all served via nginx and I'll use the
+All examples in this project will use the hostname *misty.blue-labs.org* and
+the realm *misty*. My web content is all served via nginx and I'll use the
 standard default settings and locations per nginx. Defaults locations as per
 the [Crossbar.io](https://crossbar.io) examples are also used as much as possible.
+Both the WAMP router and provider are run as user *non-root*. Pick any
+unprivileged username you feel like and remember to adjust instructions as
+needed.
 
 The following requirements will pull in additional packages. The below list
 should get everything for you.
 
-## Requirements:
 
-### Overall requirements:
+## Requirements
+
+### Overall requirements
 * a WAMP setup, I use the crossbario router and python modules
 * a webserver
 * an LDAP database
@@ -20,7 +24,6 @@ and pi3 B+
     This means you can have mixed sets of relay boards on the same Pi
   * [future] Analog output
   * [future] Digital or Analog sensors
-
 
 ### Python modules
 *  crossbar
@@ -49,9 +52,24 @@ When using pacman or pb/pkgbuilder (for AUR), install these
 Some packages don't [yet] exist in AUR, so pip or easy install these:
 * easy_install treq py-ubjson cbor lmdb sdnotify
 
+
 ### LDAP
-You'll need to set up an LDAP server, add two schema files, and create the
-DIT for Misty
+You'll need to set up an LDAP server (OpenLDAP assumed).  Accomplish the
+following steps as applicable.  If you don't have an LDAP server, all steps
+are necessary.
+
+1. Install openldap, follow appropriate distribution instructions to have a
+running service.
+2. Modify your slapd.conf per included file
+3. Copy the two schema files into your schema directory
+4. Rebuild your inline configuration
+  1. systemctl stop slapd
+  2. rm -rf /etc/openldap/slapd.d/*
+  3. su - ldap -s /bin/bash -c "slaptest -f /etc/openldap/slapd.conf -F
+  /etc/openldap/slapd.d/; slapindex"
+5. Restart slapd
+6. Create your DIT for Misty using included ldif file. It's already in
+   superior order so you can use slapadd or ldapadd.
 
 
 ## Let's Encrypt setup
@@ -66,11 +84,12 @@ for every service that does this.
 setfacl -m g:ldap:rx /etc/letsencrypt/{live,archive}
 setfacl -m g:ldap:r /etc/letsencrypt/archive/misty.blue-labs.org/privkey*.pem
 
-setfacl -m g:misty:rx /etc/letsencrypt/{live,archive}
-setfacl -m g:misty:r /etc/letsencrypt/archive/misty.blue-labs.org/privkey*.pem
+setfacl -m g:non-root:rx /etc/letsencrypt/{live,archive}
+setfacl -m g:non-root:r /etc/letsencrypt/archive/misty.blue-labs.org/privkey*.pem
 ```
 
-## nginx:
+
+## nginx
 
 ```
 worker_processes  auto;
@@ -144,7 +163,11 @@ http {
 }
 ```
 
-## Systemd unit files:
+
+## Systemd unit files
+These files are presented as if both the services will be running on the
+RaspberryPi. Adjust as needed if you run the WAMP router somewhere else.
+
 **/etc/systemd/system/misty-crossbar.service**
 ```
 [Unit]
@@ -180,8 +203,9 @@ ExecStart=/usr/bin/python provider.py
 WantedBy=multi-user.target
 ```
 
-## Crossbar:
-### manual start:
+
+## Crossbar
+### manual start
 ```
 cd $projectdirectory/app/
 crossbar start
@@ -203,6 +227,32 @@ should resemble this:
 2017-02-27T23:55:40-0500 [Controller  13395] Router 'worker-001': transport 'transport-001' started
 ```
 
+
 ## Provider
 The **provider.py** file runs on your raspberrypi machine. **provider.py** and
 **provider.conf** should be located in the same directory.
+
+
+## To-Do
+
+* put zone type image behind zone id
+* need zone type indicated somewhere (control or sensor)
+* pipe wrench - this editable area is for annotating information about the
+  zone such as the zone map; drawing dripper locations and their GPH
+* calendar - modify/view zone run times in a calendar view
+* where to email alerts and reports
+* for zone activity, time+duration, show estimated GPH per zone over time
+* sensors; moisture, rainfall, internet:rainfall, light, water level
+* icons for the zone type; sprinkler, valve, water pump, lights, etc
+* nudge app.calendar() to become aware of the UI events for *manual* and
+  *suspend* if a time frame is specified. subsequently, add an RPC to fetch
+  calendar events so the web UI can show them accordingly on the applicable
+  zone
+* add user authorization to make each pi node have a *manager-user*
+  attribute and a *viewer-user* attribute so *pi nodes* can be configured
+  to only be manageable by certain users, and read-only viewable by certain
+  users. in the absence of these attributes, the *pi node* will be
+  manageable by all users.
+* increase granularity of user authentication to make each zone per-user
+  manageable. in the absence of listed users, the zone is manageable by
+  all users permitted to manage the given *pi node*

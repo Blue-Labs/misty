@@ -1,0 +1,105 @@
+objectIdentifier BlueLabs                 1.3.6.1.4.1.47634
+objectIdentifier BlueLabsCentralizedAuth  BlueLabs:2
+objectIdentifier bfLDAP                   BlueLabsCentralizedAuth:2
+objectIdentifier bfAttributeType          bfLDAP:1
+objectIdentifier bfObjectClass            bfLDAP:2
+
+attributetype ( bfAttributeType:1.2016.3.17.1
+  NAME 'department'
+  DESC 'Department person is assigned to'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256}
+  )
+
+attributetype ( bfAttributeType:1.2016.3.17.2
+  NAME 'role'
+  DESC 'Role'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{64}
+  SINGLE-VALUE )
+
+attributetype ( bfAttributeType:1.2016.3.17.3
+  NAME 'roleAdmin'
+  DESC 'Role Admin flag'
+  EQUALITY booleanMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  SINGLE-VALUE )
+
+attributetype ( bfAttributeType:1.2016.3.17.6
+  NAME 'realm'
+  DESC 'Realms user is permitted access to'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256}
+  )
+
+attributetype ( bfAttributeType:1.2016.3.17.7
+  NAME 'realmAdmin'
+  DESC 'Realms user is authorized to administrate'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256}
+  )
+
+attributetype ( bfAttributeType:1.2016.3.17.8
+  NAME 'realmOwner'
+  DESC 'Realms user is authorized to perform super functions'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256}
+  )
+
+attributetype ( bfAttributeType:1.2016.3.17.13
+  NAME 'sshkey'
+  DESC 'SSH Key'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256}
+  )
+
+attributetype ( bfAttributeType:1.2016.3.17.14
+  NAME 'emailExternal'
+  DESC 'Email used elsewhere'
+  SUP name
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{256}
+  )
+
+attributetype ( bfAttributeType:1.2016.3.17.20
+  NAME 'pqcLength'
+  DESC 'Password Quality Check - Length'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+
+attributetype ( bfAttributeType:1.2016.3.17.21
+  NAME 'pqcLowercase'
+  DESC 'Password Quality Check - Lowercase'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+
+attributetype ( bfAttributeType:1.2016.3.17.22
+  NAME 'pqcUppercase'
+  DESC 'Password Quality Check - Uppercase'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+
+attributetype ( bfAttributeType:1.2016.3.17.23
+  NAME 'pqcDigits'
+  DESC 'Password Quality Check - Digits'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+
+attributetype ( bfAttributeType:1.2016.3.17.24
+  NAME 'pqcSymbols'
+  DESC 'Password Quality Check - Symbols'
+  EQUALITY integerMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.27
+  SINGLE-VALUE )
+
+objectClass ( bfObjectClass:1.2016.6.6.1
+  NAME 'BLCentralAuthOverlay'
+  DESC 'Additional attributes to the NIS Person definition that BlueLabs uses'
+  SUP inetOrgPerson
+  STRUCTURAL
+  MAY ( department $ role $ roleAdmin $ realm $ realmAdmin $ realmOwner $ sshkey $ email $ emailExternal
+        $ pqcLength $ pqcLowercase $ pqcUppercase $ pqcDigits $ pqcSymbols )
+  )

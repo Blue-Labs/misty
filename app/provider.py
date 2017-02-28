@@ -306,7 +306,8 @@ class _Component(ApplicationSession): # this is the Provider class
     def onJoin(self, details):
         print('ClientSession onJoin:             {}',details)
         if not self._ldap:
-            self._ldap = LDAP(self.cfg)
+            self._ldap   = LDAP(self.cfg)
+            self.pi_node = cfg.get('provider', 'pi node')
 
         sublist = yield from self.call('wamp.subscription.list')
         print('onjoin sublist:',sublist)
@@ -393,11 +394,11 @@ class _Component(ApplicationSession): # this is the Provider class
         try:
             if 'jpegPhoto' in principal and principal['jpegPhoto']:
                 if isinstance(principal['jpegPhoto'], list):
-                    principal['jpegPhoto'] = [base64.b64encode(p) for p in principal['jpegPhoto']]
+                    principal['jpegPhoto'] = [base64.b64encode(p).decode() for p in principal['jpegPhoto']]
                 else:
-                    principal['jpegPhoto'] = base64.b64encode(principal['jpegPhoto'])
+                    principal['jpegPhoto'] = base64.b64encode(principal['jpegPhoto']).decode()
             else:
-               principal['jpegPhoto'] = ['']
+               principal['jpegPhoto'] = []
 
             for k in ('realm','realmAdmin','realmOwner','roleAdmin','email','emailExternal'):
                 if not k in principal:
@@ -498,6 +499,8 @@ class _Component(ApplicationSession): # this is the Provider class
         if not 0 <= zone <= 32:
             raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
 
+        warnings.warn('check if user is authorized to modify either by the pi node or by the zone')
+
         ops = {'enabled': [(MODIFY_REPLACE, ['TRUE' if enabled else 'FALSE'])]}
 
         zone = Misty._update_zone_in_ldap(self, zone, ops)
@@ -521,32 +524,26 @@ class _Component(ApplicationSession): # this is the Provider class
         print('d is: {}'.format(d))
 
         # need to validate the stuff
-        try:
-            zone     = int(d['zone'])
-            toggle   = d['toggle']
-            state    = d['state'] == True
+        zone     = int(d['zone'])
+        toggle   = d['toggle']
+        state    = d['state'] == True
 
-            if not 0 <= zone <= 32:
-                raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
-            if not toggle in ('manual','suspend'):
-                raise ApplicationError('org.blue_labs.misty.value.error', 'unknown toggle method')
+        if not 0 <= zone <= 32:
+            raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
+        if not toggle in ('manual','suspend'):
+            raise ApplicationError('org.blue_labs.misty.value.error', 'unknown toggle method')
 
-            end_time = []
-            if state:
-                if 'end-time' in d and d['end-time']:
-                    duration = int(d['end-time']) or 31536000
-                    end_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)
+        warnings.warn('check if user is authorized to modify either by the pi node or by the zone')
 
-            #print('set {} to {} until {}'.format(toggle, state, end_time))
-            if end_time:
-                end_time = [end_time.strftime('%Y%m%d%H%M%SZ')]
+        end_time = []
+        if state:
+            if 'end-time' in d and d['end-time']:
+                duration = int(d['end-time']) or 31536000
+                end_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)
 
-        except Exception as e:
-            print('failed validity: {}'.format(e))
-            traceback.print_exc()
-            raise ApplicationError('org.blue_labs.misty.value.error', 'field input verification rejected on provider')
+        if end_time:
+            end_time = [end_time.strftime('%Y%m%d%H%M%SZ')]
 
-        #print('toggle: {}'.format(toggle))
         swap_toggle = {'manual':'suspend','suspend':'manual'}[toggle]
         swap_state  = not state
         
@@ -591,21 +588,15 @@ class _Component(ApplicationSession): # this is the Provider class
         d = args[0]
         print('d is: {}'.format(d))
 
-        # need to validate the stuff
-        try:
-            zone      = int(d['zone'])
-            attribute = d['attribute']
-            value     = d['value']
+        zone      = int(d['zone'])
+        attribute = d['attribute']
+        value     = d['value']
 
-            if not 0 <= zone <= 32:
-                raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
+        if not 0 <= zone <= 32:
+            raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
 
-        except Exception as e:
-            print('failed validity: {}'.format(e))
-            traceback.print_exc()
-            raise ApplicationError('org.blue_labs.misty.attribute.error', str(e))
+        warnings.warn('check if user is authorized to modify either by the pi node or by the zone')
 
-        dn = 'zone={},{}'.format(zone, self.ldap_zone_dn_suffix)
         ops = {attribute: (MODIFY_REPLACE, [value])}
         print('ops: {}'.format(ops))
 
@@ -807,6 +798,8 @@ class _Component(ApplicationSession): # this is the Provider class
     def _zones_add_zone(self, nz, **args):
         print(nz)
 
+        warnings.warn('check if user is authorized to modify per the pi node')
+
         # validate some foo
         bad_values=[]
         for kw in ('zone','wire_id','description','enabled',
@@ -902,6 +895,7 @@ class _Component(ApplicationSession): # this is the Provider class
     def _zones_delete_zone(self, nz, **args):
         print(nz)
 
+        warnings.warn('check if user is authorized to modify per the pi node')
         dn = 'zone={},{}'.format(nz['zone'], self.ldap_zone_dn_suffix)
 
         try:
@@ -964,7 +958,7 @@ class Misty():
         self.irl            = cfg.get('WAMP','site_irl')
         self.client_version = cfg.get('main','__version__')
         self.join_timeout   = int(cfg.get('WAMP','join timeout'))
-        self.node_name      = cfg.get('provider', 'node name')
+        self.pi_node        = cfg.get('provider', 'pi node')
         
         self._ldap = LDAP(cfg)
         
@@ -1154,7 +1148,7 @@ class Misty():
              state          = str(GPIO.input(int(zone['wire-id'])) == zone['logic-state-when-active']).upper()
              ops['running'] = (MODIFY_REPLACE, [state])
 
-         dn             = 'zone={},{}'.format(zone['zone'], caller.ldap_zone_dn_suffix)
+         dn = 'zone={},pi-node={},{}'.format(zone['zone'], self.pi_node, caller.ldap_zone_dn_suffix)
     
          caller._ldap.ctx.modify(dn, ops)
          #caller._ldap.rsearch(base   = self.ldap_zone_dn_suffix,
@@ -1173,7 +1167,7 @@ class Misty():
     @staticmethod
     def _load_zone_data(caller):
         try:
-            caller._ldap.rsearch(filter='(zone=*)')
+            caller._ldap.rsearch(filter='(&(zone=*)(pi-node={}))'.format(caller.pi_node))
         except Exception as e:
             print('fucknut: {}'.format(e))
             return
@@ -1392,8 +1386,6 @@ class Misty():
                     _['key']        = 'running'
                     _[z]['running'] = z in running
                     
-                    #ops = {'running': (MODIFY_REPLACE, ['TRUE' if _[z]['running'] else 'FALSE'])}
-                    #dn = 'zone={},ou=zones,ou=misty,dc=blue-labs,dc=org'.format(z)
                     self._update_zone_in_ldap(self, _)
                 
                     print('  dispatching')
