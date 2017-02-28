@@ -278,13 +278,13 @@ The **provider.py** file runs on your raspberrypi machine. **provider.py** and
 **provider.conf** should be located in the same directory.
 ### manual start
 
-```python
+```
 python -u provider.py
 ```
 
 If you are using the default included zone definitions, on successful
 startup, your screen output resemble this:
-```python
+```
 ┌[✓  Tue Feb 28 05:50 non-root@misty  [/etc/nginx/sites/misty.blue-labs.org/app]
 └─> python -u provider.py
 LDAP init ldap://127.0.0.1:389 - cleartext - user: uid=apimanager,ou=People,ou=misty,dc=blue-labs,dc=org - not lazy - unbound - closed - <no socket> - tls not started - not listening - SyncStrategy - internal decoder
