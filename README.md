@@ -8,6 +8,19 @@ The following requirements will pull in additional packages. The below list
 should get everything for you.
 
 ## Requirements:
+
+### Overall requirements:
+* a WAMP setup, I use the crossbario router and python modules
+* a webserver
+* an LDAP database
+* one or more RaspberryPI units. even the A models can handle this, I use a pi B, pi2 B+,
+and pi3 B+
+..* you'll need one or more relay boards. you can use either `high` or `low` triggered
+..* [future] Analog output
+..* [future] Digital or Analog sensors
+
+
+### Python modules
 *  crossbar
 *  watchdog
 *  setproctitle
@@ -34,15 +47,25 @@ When using pacman or pb/pkgbuilder (for AUR), install these
 Some packages don't [yet] exist in AUR, so pip or easy install these:
 * easy_install treq py-ubjson cbor lmdb sdnotify
 
+### LDAP
+You'll need to set up an LDAP server, add two schema files, and create the
+DIT for Misty
+
 
 ## Let's Encrypt setup
+Obtain and install your SSL certificates normally, after installing, make
+sure appropriate daemons/users have access to the files. We're using
+extended file attributes instead of file permissions because a lot of web
+servers, SQL servers, etc, bitch like cranky fucks if they don't have
+exclusive permissions to keys and it's fucking lame to make a copy of keys
+for every service that does this.
 
 ```
 setfacl -m g:ldap:rx /etc/letsencrypt/{live,archive}
 setfacl -m g:ldap:r /etc/letsencrypt/archive/misty.blue-labs.org/privkey*.pem
 
-setfacl -m g:non-root:rx /etc/letsencrypt/{live,archive}
-setfacl -m g:non-root:r /etc/letsencrypt/archive/misty.blue-labs.org/privkey*.pem
+setfacl -m g:misty:rx /etc/letsencrypt/{live,archive}
+setfacl -m g:misty:r /etc/letsencrypt/archive/misty.blue-labs.org/privkey*.pem
 ```
 
 ## nginx:
