@@ -1,16 +1,54 @@
 # Misty
-All examples in this project will use the hostname *misty.blue-labs.org* and
-the realm *misty*. My web content is all served via nginx and I'll use the
-standard default settings and locations per nginx. Defaults locations as per
-the [Crossbar.io](https://crossbar.io) examples are also used as much as possible.
-Both the WAMP router and provider are run as user *non-root*. Pick any
-unprivileged username you feel like and remember to adjust instructions as
-needed.
 
-The following requirements will pull in additional packages. The below list
-should get everything for you.
+Misty is a multiple-node control software for Raspberry Pi using Linux and
+Crossbar.io's WAMP router and python-autobahn. You can run the web user
+interface on a Pi itself, or any webserver accessible to the Pi. Data is
+stored in LDAP which you can also run on a Pi. Current design is limited to
+one Pi due to the web UI only (being rewritten now). Using the WAMP
+technology, any number of browsers can be logged into and all sessions will
+see the same current state of the relay boards controlled by the zone
+buttons.
 
-## Common definitions
+## Features
+* Based on Python 3, provider uses asyncio
+* Uses dynamic authentication for crossbar
+* Authenticates via LDAP account data
+* Stores all zone information in LDAP
+* Provider runs WAMP thread as background thread, secondary to main process
+* Web UI currently designed for single Pi node but back end supports
+  multiple. Updates to web UI in process
+* Manual start/stop of a zone plus calendar schedule
+* Suspend and unsuspend of a zone
+
+## To-Do
+
+* zone map is applicable per zone, it should redraw depending on which zone
+  the user is currently working with (mouse over? clickable? zone choice by
+  tab?)
+* put zone type image behind zone id
+* need zone type indicated somewhere (control or sensor)
+* pipe wrench - this editable area is for annotating information about the
+  zone such as the zone map; drawing dripper locations and their GPH
+* calendar - modify/view zone run times in a calendar view
+* where to email alerts and reports
+* for zone activity, time+duration, show estimated GPH per zone over time
+* sensors; moisture, rainfall, internet:rainfall, light, water level
+* icons for the zone type; sprinkler, valve, water pump, lights, etc
+* nudge app.calendar() to become aware of the UI events for *manual* and
+  *suspend* if a time frame is specified. subsequently, add an RPC to fetch
+  calendar events so the web UI can show them accordingly on the applicable
+  zone
+* add user authorization to make each pi node have a *manager-user*
+  attribute and a *viewer-user* attribute so *pi nodes* can be configured
+  to only be manageable by certain users, and read-only viewable by certain
+  users. in the absence of these attributes, the *pi node* will be
+  manageable by all users.
+* increase granularity of user authentication to make each zone per-user
+  manageable. in the absence of listed users, the zone is manageable by
+  all users permitted to manage the given *pi node*
+
+
+## Definitions and defaults
 | Term | Definition |
 |------|------------|
 | app dir | /etc/nginx/sites/somehostname.com/app/ |
@@ -19,7 +57,15 @@ should get everything for you.
 | pi node | a unique textual reference you assign per Raspberry Pi |
 | zone | a single IO unit, such as a GPIO pin that drives a relay |
 | router | a WAMP router, the Crossbar.IO is used in this project |
+| realm | logical name all logins, callbacks, and RPCs are operate under |
 
+All examples in this project will use the hostname *misty.blue-labs.org* and
+the realm *misty*. My web content is all served via nginx and I'll use the
+standard default settings and locations per nginx. Defaults locations as per
+the [Crossbar.io](https://crossbar.io) examples are also used as much as possible.
+Both the WAMP router and provider are run as user *non-root*. Pick any
+unprivileged username you feel like and remember to adjust instructions as
+needed.
 
 
 ## Requirements
@@ -31,42 +77,47 @@ should get everything for you.
 * Python 3 (Crossbar.io only supports 3.3+, I use 3.6)
 * one or more RaspberryPI units. even the A models can handle this, I use a pi B, pi2 B+,
 and pi3 B+
-  * you'll need one or more relay boards. you can use either `high` or `low`
-    triggered. Misty has logic to correctly handle both on a per-zone basis.
-    This means you can have mixed sets of relay boards on the same Pi
+  * you'll need one or more GPIO driven relay boards. you can use either
+    `high` or `low` triggered. Misty has logic to correctly handle both on a
+    per-zone basis. This means you can have mixed sets of relay boards on the
+    same Pi
   * [future] Analog output
   * [future] Digital or Analog sensors
 
 ## Install steps
 1. Build an appropriate RaspberryPi server and attach a GPIO controlled
-   relay board. At least **provider.py** will be run on it. You can run your
-   LDAP and nginx services elsewhere as long as the RaspberryPi can reach it
+    relay board. At least **provider.py** will be run on it. You can run your
+    LDAP and nginx services elsewhere as long as the RaspberryPi can reach it
 1. Clone this repo
 2. Install/modify an *LDAP* server as applicable
 3. Install/modify an *nginx* or web server as applicable, install included
-   web content
+    web content
 4. Test the LDAP server and web server
   * if you've configured your LDAP server as needed, you should be able to
     run `ldapsearch -xLLL 'zone=3'` and get results matching the bottom of
     the included **misty.ldif**
 5. Install software using disto tools or python tools. test by attempting to
-   run **crossbar start** in the app directory, and **python -u provider.py**
-   on your pi. Ensure you have all necessary python modules before
-   continuing
+    run **crossbar start** in the app directory, and **python -u provider.py**
+    on your pi. Ensure you have all necessary python modules before
+    continuing
 6. Stop crossbar and provider
 7. Set LDAP passwords for the apimanager and your user
 8. Start the WAMP router in the app directory, **crossbar start**, and leave
-   it running
+    it running
 9. Start the provider, **python -u provider.py** in the same directory as
-   provider.conf. Local files are not used so it's not really important
-   where it's placed. I happen to use the same (although empty) directory
-   structure on my pi as I do my web server so it's easy to rsync files.
-   **/etc/nginx/sites/hostname.com/app/**
+    provider.conf. Local files are not used so it's not really important
+    where it's placed. I happen to use the same (although empty) directory
+    structure on my pi as I do my web server so it's easy to rsync files.
+    **/etc/nginx/sites/hostname.com/app/**
 10. Browse to the website you set up for this. If you didn't modify any of
-   the zone entries yet, it would look similar to this after login:
-   <img width="579" height="423" src="Misty-initial.png" alt="Example using original zone data"/>
+    the zone entries yet, it would look similar to this after login:
+    <img width="579" height="423" src="Misty-initial.png" alt="Example using original zone data"/>
 
 ### Python modules
+
+The following requirements will pull in additional packages. The below list
+should get everything for you.
+
 *  crossbar
 *  watchdog
 *  setproctitle
@@ -326,30 +377,3 @@ zone 3, wire-id 18; is digital state: 1(Off) and should be: Off
 [datetime.datetime(2017, 2, 28, 10, 0), datetime.datetime(2017, 2, 28, 10, 30)]
 next event is at 2017-02-28 09:00:00
 ```
-
-## To-Do
-
-* zone map is applicable per zone, it should redraw depending on which zone
-  the user is currently working with (mouse over? clickable? zone choice by
-  tab?)
-* put zone type image behind zone id
-* need zone type indicated somewhere (control or sensor)
-* pipe wrench - this editable area is for annotating information about the
-  zone such as the zone map; drawing dripper locations and their GPH
-* calendar - modify/view zone run times in a calendar view
-* where to email alerts and reports
-* for zone activity, time+duration, show estimated GPH per zone over time
-* sensors; moisture, rainfall, internet:rainfall, light, water level
-* icons for the zone type; sprinkler, valve, water pump, lights, etc
-* nudge app.calendar() to become aware of the UI events for *manual* and
-  *suspend* if a time frame is specified. subsequently, add an RPC to fetch
-  calendar events so the web UI can show them accordingly on the applicable
-  zone
-* add user authorization to make each pi node have a *manager-user*
-  attribute and a *viewer-user* attribute so *pi nodes* can be configured
-  to only be manageable by certain users, and read-only viewable by certain
-  users. in the absence of these attributes, the *pi node* will be
-  manageable by all users.
-* increase granularity of user authentication to make each zone per-user
-  manageable. in the absence of listed users, the zone is manageable by
-  all users permitted to manage the given *pi node*
