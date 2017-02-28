@@ -75,7 +75,7 @@ class LDAP():
         self.ctx = None
 
         username = 'uid={},ou=People,{}'.format(self.username,self.base)
-        print('bind with username: {}/{}'.format(username,self.password))
+        print('bind with username: {}'.format(username))
 
         while deadtime > datetime.datetime.utcnow():
             try:
@@ -132,7 +132,7 @@ class AuthenticatorSession(ApplicationSession):
             # we expect to be started by crossbar and crossbar's CWD will be $path/.crossbar/
             # allow exceptions to propagate up to the router
             cfg = configparser.ConfigParser()
-            cfg.read('../api.conf')
+            cfg.read('../auth.conf')
             host,*port = (cfg['authentication']['host']).rsplit(':',1)
             port       = port and port[0] or '389'
             cfg['authentication']['host'] = host
@@ -260,7 +260,7 @@ class AuthenticatorSession(ApplicationSession):
             # clients need to be activated into a realm. currently Crossbar only supports one
             # realm per connection so for now just force everyone into the 'misty' realm
             # regardless of which realm they log in with
-            realm=self.cfg.get('WAMP', 'realm'
+            realm=self.cfg.get('WAMP', 'realm')
 
             res = {
                 'realm': realm,
