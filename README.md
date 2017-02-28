@@ -120,7 +120,7 @@ http {
 ```
 
 ## Systemd unit files:
-File: */etc/systemd/system/misty-crossbar.service*
+**/etc/systemd/system/misty-crossbar.service**
 ```
 [Unit]
 Description=Misty service
@@ -136,7 +136,7 @@ ExecStart=/usr/bin/crossbar start
 WantedBy=multi-user.target
 ```
 
-File: */etc/systemd/system/misty-app.service*
+**/etc/systemd/system/misty-app.service**
 ```
 [Unit]
 Description=Misty APP
@@ -165,7 +165,7 @@ crossbar start
 You will see a few dozen lines of output. There should be no errors, no
 tracebacks, no indications of exceptions and when idle, the last few lines
 should resemble this:
-
+```
 2017-02-27T23:55:40-0500 [Controller  13395] Router 'worker-001': component 'component-001' started
 2017-02-27T23:55:40-0500 [Router      13400] Loaded 0 cookie records from file. Cookie store has 0 entries.
 2017-02-27T23:55:40-0500 [Router      13400] File-backed cookie store active /etc/nginx/sites/misty.blue-labs.org/app/.crossbar/cookies.dat
@@ -176,6 +176,7 @@ should resemble this:
 2017-02-27T23:55:40-0500 [Router      13400] OpenSSL is using elliptic curve prime256v1 (NIST P-256)
 2017-02-27T23:55:40-0500 [Router      13400] Site (TLS) starting on 8080
 2017-02-27T23:55:40-0500 [Controller  13395] Router 'worker-001': transport 'transport-001' started
+```
 
 ## Provider
 The **provider.py** file runs on your raspberrypi machine. **provider.py** and
