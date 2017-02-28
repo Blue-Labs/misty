@@ -9,6 +9,15 @@ technology, any number of browsers can be logged into and all sessions will
 see the same current state of the relay boards controlled by the zone
 buttons.
 
+I currently use three Pi nodes as three individual setups. The software has
+been rewritten to support multiple nodes and I'm currently modifying the web
+UI so all three Pi nodes will be controllable by the same interface. One
+controls all the electrical outlets for my saltwater reef tank. Another
+controls low volume irrigation watering for our back yard gardens. Another
+controls the sprinkler zones for the lawn.
+
+My Pi nodes are built using Arch Linux, some are wired, some are wireless.
+
 ## Features
 * Based on Python 3, provider uses asyncio
 * Uses dynamic authentication for crossbar
@@ -19,6 +28,7 @@ buttons.
   multiple. Updates to web UI in process
 * Manual start/stop of a zone plus calendar schedule
 * Suspend and unsuspend of a zone
+* All activities require authenticated login
 
 ## To-Do
 
@@ -34,6 +44,7 @@ buttons.
 * for zone activity, time+duration, show estimated GPH per zone over time
 * sensors; moisture, rainfall, internet:rainfall, light, water level
 * icons for the zone type; sprinkler, valve, water pump, lights, etc
+* build js based SVG editor to draw zones
 * nudge app.calendar() to become aware of the UI events for *manual* and
   *suspend* if a time frame is specified. subsequently, add an RPC to fetch
   calendar events so the web UI can show them accordingly on the applicable
@@ -43,7 +54,7 @@ buttons.
   to only be manageable by certain users, and read-only viewable by certain
   users. in the absence of these attributes, the *pi node* will be
   manageable by all users.
-* increase granularity of user authentication to make each zone per-user
+* increase granularity of user authorization to make each zone per-user
   manageable. in the absence of listed users, the zone is manageable by
   all users permitted to manage the given *pi node*
 
