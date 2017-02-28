@@ -1,0 +1,183 @@
+<!doctype>
+<html>
+<head>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.0/jquery-ui.min.js"></script>
+  <script src="/js/misty.js"></script>
+  <script>AUTOBAHN_DEBUGxx = true; /* put this before we load autobahn.js */</script>
+  <script src="//autobahn.s3.amazonaws.com/autobahnjs/latest/autobahn.min.jgz"></script>
+  <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.0/jquery-ui.min.css"/>
+  <link rel="stylesheet" type="text/css" href="/css/misty.css" />
+  <link rel="stylesheet" type="text/css" href="/css/misty-svg.css" />
+  
+
+</head>
+<body>
+<div class="body-bg"></div>
+<div class="page-box">
+  <div class="control-panel-box">
+    <div class="control-panel">
+
+      <div class="title">
+        <h1>Misty</h1>
+
+        <p>Todo:</p>
+        <ul>
+          <li>put zone type image behind zone id</li>
+          <li>need zone type indicated somewhere (control or sensor)</li>
+          <li>pipe wrench - this editable area is for annotating information
+          about the zone such as the zone map; drawing dripper locations and
+          their GPH</li>
+          <li>calendar - modify/view zone run times in a calendar view</li>
+          <li>where to email alerts and reports</li>
+          <li>for zone activity, time+duration, show estimated GPH per zone over time</li>
+          <li>sensors; moisture, rainfall, internet:rainfall, light, water
+          level</li>
+          <li>icons for the zone type; sprinkler, valve, water pump, lights, etc</li>
+        </ul>
+      </div>
+
+      <div class="menu">
+      <div id="api-active-icon"></div>
+        <ul>
+          <li><button disabled="disabled">Settings</button></li>
+          <li><button disabled="disabled">Zone logs</button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="zone-map-box">
+        <!-- svg map -->
+        <h3>Zone map</h3>
+        <div class="zone-map">
+          <p>design needs:</p>
+          <ol>
+            <li>1ft squares</li>
+            <li>arcs</li>
+            <li>js drawable</li>
+            <li>generate svg</li>
+            <li>drippers +gph</li>
+            <li>0-360 sprinklers +range +gph</li>
+            <li>objects that block sprinklers</li>
+            <li>blue - water lines</li>
+            <li>light blue - water coverage</li>
+            <li>orange - objects that block</li>
+            <li>black - zone geography</li>
+            <li>brown - warning/insufficient water</li>
+            <li>zones that are active will be highlighted</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="activity-log-box">
+        <h3>Activity log</h3>
+        <div class="activity-log">
+          <div class="zone-activity-line">
+            <p><span class="chron">2015-Apr-20</span>
+               <span class="line">Z1 on for 30m</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="zone-list-box">
+    <!-- user box -->
+    <span class="user-box">
+      <div class="anonymous-login">
+        <input type="text" id="username" name="username" placeholder="username"/>
+        <input type="password" id="password" name="password" placeholder="password"/>
+        <input type="button" id="login" name="login" value="login"/>
+      </div>
+      <div class="logged-in-profile">
+        <span class="department"></span>
+        <span class="username"></span>
+        <span class="icons">
+          <img src="/images/18px_logout.png" class="logout button" />
+        </span>
+        <span class="userpic"></span>
+        <span class="logout"></span>
+      </div>
+      <div class="please-log-in">
+        <p>Please log in</p>
+      </div>
+    </span>
+
+    <!-- api spinner -->
+    <div class="api-not-available">
+      <div id="api-na-container">
+        <div id="api-na-main">
+          <div id="api-na-outer-circle">
+            <div id="api-na-inner-circle">
+              <div id="api-na-center-circle">
+                <div id="api-na-content">
+                  <p>Waiting for API &#x2026;</p>
+    </div></div></div></div></div></div></div>
+
+    <div class="api-messages">
+      <div>
+      </div>
+    </div>
+
+    <!-- zone programs -->
+    <h3>Zones
+    <div class="menu">
+    <button>Add zone</button>
+    </div>
+    </h3>
+    <ul>
+    </ul>
+  </div>
+</div>
+
+</body>
+
+  <template id="zone-template">
+    <li class="zone-program-entry">
+      <span class="zone-id-descrip-row">
+        <span class="zone-program-number"></span>
+        <span class="zone-program-description"></span>
+      </span>
+      <span class="zone-status-map-row">
+        <span class="status-box-wrapper">
+          <span class="status-box circular-menu">
+            <div class="circle" title="Settings">
+              <a name="enable"   class="radial-menu-icon icon32 on-off-icon on"   title="Enable/disable zone" style="left: 46%; top: 6%;"></a>
+              <a name="settings" class="radial-menu-icon icon32 pipe-wrench-icon" title="Settings; GPH, zone map, relay control type, etc" style="left: 74.2843%; top: 17.7157%;"></a>
+              <a name="schedule" class="radial-menu-icon icon32 schedule-icon"    title="Scheduling" style="left: 86%; top: 46%;"></a>
+              <a name="manual"   class="radial-menu-icon icon32 run-icon"         title="Start zone right now. Enter a duration (in seconds) in input box.
+                                                                                         If no duration specified within 8 seconds, zone will run until manually stopped.
+                                                                                         If turned on while zone is running, zone will continue running until duration expires or manually stopped (max 1yr)." style="left: 74.2843%; top: 74.2843%;"></a>
+              <a name="suspend"  class="radial-menu-icon icon32 pause-icon"       title="Suspend zone activation. Enter a duration (in seconds) in input box.
+                                                                                         If suspended while zone is running, zone will shut down until end of run time.
+                                                                                         If suspended while zone is not active, zone will suspend until duration expires or manually unsuspended." style="left: 46%; top: 86%;"></a>
+              <a name="activity" class="radial-menu-icon icon32 activity-icon"    title="Zone activity log" style="left: 17.7157%; top: 74.2843%;"></a>
+              <a name="delete"   class="radial-menu-icon icon32 delete-icon"      title="Delete zone" style="left: 6%; top: 46%;"></a>
+                <span class="get-duration" title="Enter duration in SECONDS" style="left: 17.7157%; top: 17.7157%;">
+                  <input type="text" width="2">
+                    <button class="get-duration-close">ⓧ</button>
+                </span>
+              </a>
+            </div>
+            <a href="" class="menu-button icon32 settings-icon"></a>
+            <svg version="1.1" baseProfile="basic" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink x=" 0px"="" y="0px" viewBox="0 0 128 128">
+              <path d="M64,1  a63,63 0 1,0 0,126  a63,63 0 1,0 0,-126" class="timeout-path"></path>
+            </svg>
+          </span>
+          <span class="zone-program-status">
+            <span class="status-box status-icon enable-icon"></span>
+            <span class="status-box status-icon schedule-icon"></span>
+            <span class="status-box status-icon running-icon">
+              <span class="status-icon-overlay running-manual">manual</span>
+              <span class="status-icon-overlay running-suspend">suspend</span>
+            </span>
+          </span>
+        </span>
+        <span class="zone-program-map" style=""></span>
+      </span>
+    </li>
+  </template>
+
+</html>
+

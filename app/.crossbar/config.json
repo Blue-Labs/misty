@@ -1,0 +1,235 @@
+{
+    "version": 2,
+    "controller": {},
+    "workers": [
+        {
+            "type": "router",
+            "options": {
+                "pythonpath": [
+                    ".."
+                ],
+                "env": {
+                    "vars": {
+                        "PYTHONUNBUFFERED": "1"
+                    }
+                }
+            },
+            "realms": [
+                {
+                    "name": "authentication",
+                    "roles": [
+                        {
+                            "name": "authenticator",
+                            "permissions": [
+                                {
+                                    "uri": "org.blue_labs.misty.authenticate",
+                                    "match": "exact",
+                                    "allow": {
+                                        "call": false,
+                                        "register": true,
+                                        "publish": false,
+                                        "subscribe": false
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": false
+                                    },
+                                    "cache": true
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "misty",
+                    "roles": [
+                        {
+                            "name": "Provider",
+                            "allow-by-default": true,
+                            "permissions": [
+                                {
+                                    "uri": "wamp.subscription.*",
+                                    "allow": {
+                                        "call": true,
+                                        "subscribe": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.role.*",
+                                    "allow": {
+                                        "register": true,
+                                        "publish": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.zone.*",
+                                    "allow": {
+                                        "register": true,
+                                        "publish": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.zones",
+                                    "allow": {
+                                        "register": true,
+                                        "publish": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.zones.*",
+                                    "allow": {
+                                        "register": true,
+                                        "publish": true,
+                                        "call": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.rpi.*",
+                                    "allow": {
+                                        "register": true,
+                                        "publish": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Client",
+                            "allow-by-default": true,
+                            "permissions": [
+                                {
+                                    "uri": "org.blue_labs.misty.role.*",
+                                    "allow": {
+                                        "call": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.zone.*",
+                                    "allow": {
+                                        "subscribe": true,
+                                        "call": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.zones",
+                                    "allow": {
+                                        "subscribe": true,
+                                        "call": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.zones.*",
+                                    "allow": {
+                                        "subscribe": true,
+                                        "call": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
+                                    "uri": "org.blue_labs.misty.rpi.*",
+                                    "allow": {
+                                        "subscribe": true,
+                                        "call": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "transports": [
+                {
+                    "type": "web",
+                    "endpoint": {
+                        "type": "tcp",
+                        "port": 8080,
+                        "tls": {
+                            "key": "/etc/letsencrypt/live/misty.blue-labs.org/privkey.pem",
+                            "certificate": "/etc/letsencrypt/live/misty.blue-labs.org/cert.pem",
+                            "chain_certificates": [
+                                "/etc/letsencrypt/live/misty.blue-labs.org/chain.pem"
+                            ],
+                            "dhparam": "/etc/nginx/sites/misty.blue-labs.org/dhparam.pem",
+                            "ciphers": "ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AES:RSA+3DES:!ADH:!AECDH:!MD5:!DSS"
+                        }
+                    },
+                    "paths": {
+                        "/": {
+                            "type": "static",
+                            "directory": "../../htdocs/"
+                        },
+                        "ws": {
+                            "type": "websocket",
+                            "cookie": {
+                                "store": {
+                                    "type": "file",
+                                    "filename": "cookies.dat"
+                                }
+                            },
+                            "url": "wss://unused-but-required-setting.org:8080/ws",
+                            "auth": {
+                                "ticket": {
+                                    "type": "dynamic",
+                                    "authenticator": "org.blue_labs.misty.authenticate",
+                                    "authenticator-realm": "authentication"
+                                },
+                                "cookie": {}
+                            },
+                            "options": {
+                                "auto_ping_interval": 10000,
+                                "auto_ping_timeout": 21000,
+                                "echo_close_codereason": true
+                            }
+                        }
+                    }
+                }
+            ],
+            "components": [
+                {
+                    "type": "class",
+                    "classname": "authenticator.AuthenticatorSession",
+                    "realm": "authentication",
+                    "role": "authenticator"
+                }
+            ]
+        }
+    ]
+}

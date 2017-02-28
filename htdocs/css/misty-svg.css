@@ -1,0 +1,12 @@
+.circular-menu .timeout-path {
+  fill:transparent;
+  stroke:#99f;
+  stroke-width:3px;
+  stroke-dasharray:314%;
+  stroke-dashoffset:0;
+}
+
+.circular-menu .timeout-path.active {
+  stroke-dashoffset:-314%;
+}
+
