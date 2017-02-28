@@ -15,7 +15,9 @@ should get everything for you.
 * an LDAP database
 * one or more RaspberryPI units. even the A models can handle this, I use a pi B, pi2 B+,
 and pi3 B+
-  * you'll need one or more relay boards. you can use either `high` or `low` triggered
+  * you'll need one or more relay boards. you can use either `high` or `low`
+    triggered. Misty has logic to correctly handle both on a per-zone basis.
+    This means you can have mixed sets of relay boards on the same Pi
   * [future] Analog output
   * [future] Digital or Analog sensors
 
