@@ -20,40 +20,24 @@
 
       <div class="title">
         <h1>Misty</h1>
-
-        <p>Todo:</p>
-        <ul>
-          <li>put zone type image behind zone id</li>
-          <li>need zone type indicated somewhere (control or sensor)</li>
-          <li>pipe wrench - this editable area is for annotating information
-          about the zone such as the zone map; drawing dripper locations and
-          their GPH</li>
-          <li>calendar - modify/view zone run times in a calendar view</li>
-          <li>where to email alerts and reports</li>
-          <li>for zone activity, time+duration, show estimated GPH per zone over time</li>
-          <li>sensors; moisture, rainfall, internet:rainfall, light, water
-          level</li>
-          <li>icons for the zone type; sprinkler, valve, water pump, lights, etc</li>
-        </ul>
       </div>
 
       <div class="menu">
       <div id="api-active-icon"></div>
-        <ul>
-          <li><button disabled="disabled">Settings</button></li>
-          <li><button disabled="disabled">Zone logs</button>
-          </li>
-        </ul>
+        <button disabled="disabled">Settings</button>
+        <button disabled="disabled">Zone logs</button>
+        <button disabled="disabled">Add Pi node</button>
+        <button disabled="disabled">Add zone</button>
       </div>
 
       <div class="zone-map-box">
         <!-- svg map -->
-        <h3>Zone map</h3>
+        <h3>Pi node Zone map</h3>
         <div class="zone-map">
           <p>design needs:</p>
           <ol>
             <li>1ft squares</li>
-            <li>arcs</li>
+            <li>bezier paths</li>
             <li>js drawable</li>
             <li>generate svg</li>
             <li>drippers +gph</li>
@@ -63,7 +47,7 @@
             <li>light blue - water coverage</li>
             <li>orange - objects that block</li>
             <li>black - zone geography</li>
-            <li>brown - warning/insufficient water</li>
+            <li>light brown - warning/insufficient water</li>
             <li>zones that are active will be highlighted</li>
           </ol>
         </div>
@@ -122,10 +106,8 @@
 
     <!-- zone programs -->
     <h3>Zones
-    <div class="menu">
-    <button>Add zone</button>
-    </div>
     </h3>
+    <br/> <!-- build a tab choosable wrapper -->
     <ul>
     </ul>
   </div>
@@ -161,7 +143,7 @@
               </a>
             </div>
             <a href="" class="menu-button icon32 settings-icon"></a>
-            <svg version="1.1" baseProfile="basic" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink x=" 0px"="" y="0px" viewBox="0 0 128 128">
+            <svg version="1.1" baseProfile="basic" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 128 128">
               <path d="M64,1  a63,63 0 1,0 0,126  a63,63 0 1,0 0,-126" class="timeout-path"></path>
             </svg>
           </span>

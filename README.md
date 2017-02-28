@@ -10,6 +10,17 @@ needed.
 The following requirements will pull in additional packages. The below list
 should get everything for you.
 
+## Common definitions
+| Term | Definition |
+|------|------------|
+| app dir | /etc/nginx/sites/somehostname.com/app/ |
+| AIO | Analog IO |
+| DIO | Digital IO |
+| pi node | a unique textual reference you assign per Raspberry Pi |
+| zone | a single IO unit, such as a GPIO pin that drives a relay |
+| router | a WAMP router, the Crossbar.IO is used in this project |
+
+
 
 ## Requirements
 
@@ -17,6 +28,7 @@ should get everything for you.
 * a WAMP setup, I use the crossbario router and python modules
 * a webserver
 * an LDAP database
+* Python 3 (all current versions, 3.2 to 3.6 work fine)
 * one or more RaspberryPI units. even the A models can handle this, I use a pi B, pi2 B+,
 and pi3 B+
   * you'll need one or more relay boards. you can use either `high` or `low`
@@ -24,6 +36,30 @@ and pi3 B+
     This means you can have mixed sets of relay boards on the same Pi
   * [future] Analog output
   * [future] Digital or Analog sensors
+
+## Install steps
+1. Build an appropriate RaspberryPi server and attach a GPIO controlled
+   relay board. At least **provider.py** will be run on it. You can run your
+   LDAP and nginx services elsewhere as long as the RaspberryPi can reach it
+1. Clone this repo
+2. Install/modify an *LDAP* server as applicable
+3. Install/modify an *nginx* or web server as applicable, install included
+   web content
+4. Test the LDAP server and web server
+  * if you've configured your LDAP server as needed, you should be able to
+    run `ldapsearch -xLLL 'zone=3'` and get results matching the bottom of
+    the included **misty.ldif**
+5. Install software using disto tools or python tools. test by attempting to
+   run **crossbar start** in the app directory, and **python -u provider.py**
+   on your pi. Ensure you have all necessary python modules before
+   continuing
+6. Start the WAMP router in the app directory, **crossbar start**, and leave
+   it running
+7. Start the provider, **python -u provider.py** in the same directory as
+   provider.conf. Local files are not used so it's not really important
+   where it's placed. I happen to use the same (although empty) directory
+   structure on my pi as I do my web server so it's easy to rsync files.
+   **/etc/nginx/sites/hostname.com/app/**
 
 ### Python modules
 *  crossbar
@@ -68,8 +104,12 @@ running service.
   3. su - ldap -s /bin/bash -c "slaptest -f /etc/openldap/slapd.conf -F
   /etc/openldap/slapd.d/; slapindex"
 5. Restart slapd
+6. Modify the included ldif file, you probably don't want me as the only
+   user -- it's there as an example. A single Pi node and three zones
+   have been included as an example as well
 6. Create your DIT for Misty using included ldif file. It's already in
-   superior order so you can use slapadd or ldapadd.
+   superior order so you can use slapadd or ldapadd
+7. Set password(s) as applicable
 
 
 ## Let's Encrypt setup
@@ -235,6 +275,9 @@ The **provider.py** file runs on your raspberrypi machine. **provider.py** and
 
 ## To-Do
 
+* zone map is applicable per zone, it should redraw depending on which zone
+  the user is currently working with (mouse over? clickable? zone choice by
+  tab?)
 * put zone type image behind zone id
 * need zone type indicated somewhere (control or sensor)
 * pipe wrench - this editable area is for annotating information about the
