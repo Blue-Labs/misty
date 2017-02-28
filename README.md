@@ -15,9 +15,9 @@ should get everything for you.
 * an LDAP database
 * one or more RaspberryPI units. even the A models can handle this, I use a pi B, pi2 B+,
 and pi3 B+
-..* you'll need one or more relay boards. you can use either `high` or `low` triggered
-..* [future] Analog output
-..* [future] Digital or Analog sensors
+  * you'll need one or more relay boards. you can use either `high` or `low` triggered
+  * [future] Analog output
+  * [future] Digital or Analog sensors
 
 
 ### Python modules
