@@ -28,7 +28,7 @@ should get everything for you.
 * a WAMP setup, I use the crossbario router and python modules
 * a webserver
 * an LDAP database
-* Python 3 (all current versions, 3.2 to 3.6 work fine)
+* Python 3 (Crossbar.io only supports 3.3+, I use 3.6)
 * one or more RaspberryPI units. even the A models can handle this, I use a pi B, pi2 B+,
 and pi3 B+
   * you'll need one or more relay boards. you can use either `high` or `low`
@@ -53,15 +53,17 @@ and pi3 B+
    run **crossbar start** in the app directory, and **python -u provider.py**
    on your pi. Ensure you have all necessary python modules before
    continuing
-6. Start the WAMP router in the app directory, **crossbar start**, and leave
+6. Stop crossbar and provider
+7. Set LDAP passwords for the apimanager and your user
+8. Start the WAMP router in the app directory, **crossbar start**, and leave
    it running
-7. Start the provider, **python -u provider.py** in the same directory as
+9. Start the provider, **python -u provider.py** in the same directory as
    provider.conf. Local files are not used so it's not really important
    where it's placed. I happen to use the same (although empty) directory
    structure on my pi as I do my web server so it's easy to rsync files.
    **/etc/nginx/sites/hostname.com/app/**
-8. Browse to the website you set up for this. If you didn't modify any of
-   the zone entries yet, it should look similar to this:
+10. Browse to the website you set up for this. If you didn't modify any of
+   the zone entries yet, it would look similar to this after login:
    <img width="579" height="423" src="Misty-initial.png" alt="Example using original zone data"/>
 
 ### Python modules
@@ -274,7 +276,56 @@ should resemble this:
 ## Provider
 The **provider.py** file runs on your raspberrypi machine. **provider.py** and
 **provider.conf** should be located in the same directory.
+### manual start
 
+```python
+python -u provider.py
+```
+
+If you are using the default included zone definitions, on successful
+startup, your screen output resemble this:
+```python
+┌[✓  Tue Feb 28 05:50 non-root@misty  [/etc/nginx/sites/misty.blue-labs.org/app]
+└─> python -u provider.py
+LDAP init ldap://127.0.0.1:389 - cleartext - user: uid=apimanager,ou=People,ou=misty,dc=blue-labs,dc=org - not lazy - unbound - closed - <no socket> - tls not started - not listening - SyncStrategy - internal decoder
+2017-02-28T05:50:24 provider.py:1198: UserWarning: we need a function to reduce something like "1245m" to 20h45m
+  warnings.warn('we need a function to reduce something like "1245m" to 20h45m')
+
+2017-02-28T05:50:24 hardware setup: [] set for input
+2017-02-28T05:50:24 hardware setup: [4, 17, 18] set for output
+ClientSession connected:          Joining realm <misty> with authid <apimanager>
+ClientSession challenge received: Challenge(method=ticket, extra={})
+ClientSession onJoin:             {} SessionDetails(realm=<misty>, session=8526705521033352, authid=<apimanager>, authrole=<Provider>, authmethod=ticket, authprovider=dynamic, authextra={'roleAdmin': [], 'jpegPhoto': [], 'department': [], 'displayName': []}, resumed=None, resumable=None, resume_token=None)
+LDAP init ldap://127.0.0.1:389 - cleartext - user: uid=apimanager,ou=People,ou=misty,dc=blue-labs,dc=org - not lazy - unbound - closed - <no socket> - tls not started - not listening - SyncStrategy - internal decoder
+onjoin sublist: {'exact': [3372332874471779], 'prefix': [], 'wildcard': []}
+Subscribed 0 procedure(s)
+zones.research(caller=8526705521033352)
+2017-02-28T05:50:37 hardware setup: [] set for input
+2017-02-28T05:50:37 hardware setup: [4, 17, 18] set for output
+zone(1/gpio#4) logic level: True, active: FALSE
+zone(2/gpio#17) logic level: True, active: FALSE
+zone(3/gpio#18) logic level: True, active: FALSE
+publishing to org.blue_labs.misty.zones, options={'exclude': None, 'eligible': [8526705521033352], 'acknowledge': True} {1: {'zone': 1, 'pi-node': 'backyard gardens', 'trigger': '', 'trigger-type': 'time of day', 'mode': 'independent', 'duration-type': '', 'enabled': True, 'programmed': True, 'epoch': '09:00', 'duration': '30m', 'logic-state-when-active': False, 'running': False, 'wire-id': 4, 'manual-on': False, 'zone-description': 'Patio garden'}, 2: {'zone': 2, 'pi-node': 'backyard gardens', 'trigger': '', 'trigger-type': 'time of day', 'mode': 'independent', 'duration-type': '', 'enabled': True, 'programmed': True, 'epoch': '09:30', 'duration': '30m', 'logic-state-when-active': False, 'wire-id': 17, 'zone-description': 'Boxed gardens', 'manual-on': False, 'running': False}, 3: {'zone': 3, 'pi-node': 'backyard gardens', 'trigger': '', 'trigger-type': 'time of day', 'mode': 'independent', 'duration-type': '', 'enabled': True, 'programmed': True, 'duration': '30m', 'logic-state-when-active': False, 'wire-id': 18, 'zone-description': 'Northern fence', 'running': False, 'suspend-on': True, 'epoch': '10:00'}}
+running calendar cycle
+Check(zone=1)
+  independent
+zone 1 epoch: 02/28-09:00 for duration of 0:30:00
+   02/28-09:00  02/28-05:50  02/28-09:30
+Check(zone=2)
+  independent
+zone 2 epoch: 02/28-09:30 for duration of 0:30:00
+   02/28-09:30  02/28-05:50  02/28-10:00
+Check(zone=3)
+  suspended
+Zones that should be ON:
+zone 1, wire-id 4; is digital state: 1(Off) and should be: Off
+zone 2, wire-id 17; is digital state: 1(Off) and should be: Off
+zone 3, wire-id 18; is digital state: 1(Off) and should be: Off
+[datetime.datetime(2017, 2, 28, 9, 0), datetime.datetime(2017, 2, 28, 9, 30)]
+[datetime.datetime(2017, 2, 28, 9, 30), datetime.datetime(2017, 2, 28, 10, 0)]
+[datetime.datetime(2017, 2, 28, 10, 0), datetime.datetime(2017, 2, 28, 10, 30)]
+next event is at 2017-02-28 09:00:00
+```
 
 ## To-Do
 
