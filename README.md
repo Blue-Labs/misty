@@ -62,7 +62,7 @@ and pi3 B+
    **/etc/nginx/sites/hostname.com/app/**
 8. Browse to the website you set up for this. If you didn't modify any of
    the zone entries yet, it should look similar to this:
-   <img src="../Misty-initial.png" alt="Example using original zone data"/>
+   <img width="579" height="423" src="Misty-initial.png" alt="Example using original zone data"/>
 
 ### Python modules
 *  crossbar
