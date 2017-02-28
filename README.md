@@ -60,6 +60,9 @@ and pi3 B+
    where it's placed. I happen to use the same (although empty) directory
    structure on my pi as I do my web server so it's easy to rsync files.
    **/etc/nginx/sites/hostname.com/app/**
+8. Browse to the website you set up for this. If you didn't modify any of
+   the zone entries yet, it should look similar to this:
+   <img src="../Misty-initial.png" alt="Example using original zone data"/>
 
 ### Python modules
 *  crossbar
