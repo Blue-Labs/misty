@@ -220,16 +220,19 @@ class AuthenticatorSession(ApplicationSession):
                 if not 'roleAdmin' in principal:
                     principal['roleAdmin'] = False
                 if not 'jpegPhoto' in principal:
-                    principal['jpegPhoto'] = [b'']
+                    principal['jpegPhoto'] = []
                 if not 'displayName' in principal:
                     principal['displayName'] = ''
                 if not 'department' in principal:
                     principal['department'] = ['']
 
-                try:
-                    principal['jpegPhoto'] = [base64.b64encode(principal['jpegPhoto'][0])]
-                except:
-                    principal['jpegPhoto'] = []
+                if principal['jpegPhoto']:
+                    bl = []
+                    print('reencoding jpeg images as b64')
+                    for p in principal['jpegPhoto']:
+                        bp = base64.b64encode(p).decode()
+                        bl.append(bp)
+                    principal['jpegPhoto'] = bl
 
                 if not authid == apimanager:
                     # if not, this effectively means there's no expiration
