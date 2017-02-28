@@ -17,6 +17,7 @@ __license__  = 'Apache 2.0'
 
 import ssl
 import time
+import txaio
 import base64
 import hashlib
 import datetime
@@ -45,6 +46,8 @@ from twisted.internet.defer  import inlineCallbacks
 from autobahn.twisted.wamp   import ApplicationSession
 from autobahn.wamp.exception import ApplicationError
 
+txaio.start_logging(level='info')
+txaio.use_twisted()
 
 # configparser helpers
 def _cfg_None(config, section, key):
@@ -69,13 +72,13 @@ class LDAP():
         self.userdn      = cfg.get('authentication', 'userdn')
         self.username    = ''
         self.password    = ''
+        self.log         = txaio.make_logger()
 
     def retry_connect(self):
         deadtime = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         self.ctx = None
 
         username = 'uid={},ou=People,{}'.format(self.username,self.base)
-        print('bind with username: {}'.format(username))
 
         while deadtime > datetime.datetime.utcnow():
             try:
@@ -105,7 +108,7 @@ class LDAP():
 
             except Exception as e:
                 # print so it's visible, crossbar likes to swallow things
-                print('LDAP error: {}'.format(e))
+                self.log.error('LDAP error: {}'.format(e))
                 raise ApplicationError('org.blue_labs.misty.ldap.error', e)
 
         self.ctx = ctx
@@ -124,7 +127,7 @@ class LDAP():
 class AuthenticatorSession(ApplicationSession):
     @inlineCallbacks
     def onJoin(self, details):
-        print("WAMP-Ticket dynamic authenticator joined: {}".format(details))
+        self.log.debug("WAMP-Ticket dynamic authenticator joined: {}".format(details))
 
         try:
             self._ldap
@@ -155,7 +158,7 @@ class AuthenticatorSession(ApplicationSession):
 
 
         def authenticate(realm, authid, details):
-            print("WAMP-Ticket dynamic authenticator invoked: realm='{}', authid='{}', details=".format(realm, authid))
+            self.log.debug("WAMP-Ticket dynamic authenticator invoked: realm='{}', authid='{}', details=".format(realm, authid))
             pprint(details)
             gnow       = datetime.datetime.now(datetime.timezone.utc)
             ticket     = details['ticket']
@@ -169,7 +172,7 @@ class AuthenticatorSession(ApplicationSession):
                 ldap_bind_check.ctx.unbind()
                 del ldap_bind_check
             except Exception as e:
-                print('fuck: {}'.format(e))
+                self.log.error('fuck: {}'.format(e))
                 raise ApplicationError('org.blue_labs.misty.invalid_credentials',
                     "could not authenticate session - invalid credentials for {!r}"
                     .format(authid))
@@ -183,7 +186,7 @@ class AuthenticatorSession(ApplicationSession):
                 self._ldap.rsearch(filter='(uid={authid})'.format(authid=authid),
                       attributes=attributes)
             except Exception as e:
-                print('omgwtf: {}'.format(e))
+                self.log.error('omgwtf: {}'.format(e))
                 raise ApplicationError('org.blue_labs.misty.ldap.error',
                     'user not assigned any realms to authenticate with')
 
@@ -237,14 +240,14 @@ class AuthenticatorSession(ApplicationSession):
                             shadow_expire = -1
 
                         epoch_to_now = (datetime.datetime.utcnow() - datetime.datetime(1970,1,1)).days
-                        print('epoch_to_now = {}'.format(epoch_to_now))
+                        self.log.debug('epoch_to_now = {}'.format(epoch_to_now))
                         days_until_expired = epoch_to_now - shadow_expire
                         if days_until_expired <= 0:
                             raise ApplicationError('org.blue_labs.misty.account_expired',
                                 "could not authenticate session - expired password for principal '{}'"
                                 .format(authid))
                     else:
-                        print("maybe uid='{}' should have shadowExpire set?".format(authid))
+                        self.log.warning("maybe uid='{}' should have shadowExpire set?".format(authid))
 
 
                 if not 'notBefore' in principal and 'notAfter' in principal:
@@ -284,13 +287,13 @@ class AuthenticatorSession(ApplicationSession):
                 }
             }
 
-            print('Requested realm: {}, assigned role: {}'.format(realm, principal['role']))
-            print("WAMP-Ticket authentication success: {}".format(resp))
+            self.log.info('{} login, requested realm: {}, assigned role: {}'.format(authid, realm, principal['role']))
+            self.log.info("WAMP-Ticket authentication success: {}".format(resp))
             return res
 
         try:
             yield self.register(authenticate, 'org.blue_labs.misty.authenticate')
-            print("WAMP-Ticket dynamic authenticator registered")
+            self.log.info("WAMP-Ticket dynamic authenticator registered")
         except Exception as e:
             raise ApplicationError('org.blue_labs.misty.error',
                 'Failed to register dynamic authenticator: {}'.format(e))

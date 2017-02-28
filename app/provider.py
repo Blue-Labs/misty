@@ -4,10 +4,10 @@ This is the standalone provider for crossbar that provides all the RPCs and pub/
 operations. We ONLY use asyncio here, no twisted.
 """
 
-__version__  = '1.8'
+__version__  = '1.9'
 __author__   = 'David Ford <david@blue-labs.org>'
 __email__    = 'david@blue-labs.org'
-__date__     = '2017-Feb-26 10:05z'
+__date__     = '2017-Feb-28 5:39z'
 __license__  = 'Apache 2.0'
 
 # ubjson emits an ImportWarning warning so import it now before we turn on warnings (imported in autobahn wamp serializers)
@@ -85,6 +85,7 @@ from concurrent.futures import CancelledError
 from concurrent.futures import ProcessPoolExecutor
 
 txaio.start_logging(level='info')
+txaio.use_asyncio()
 
 
 class LDAP():
@@ -121,10 +122,15 @@ class LDAP():
                                      password=self.passwd,
                                      raise_exceptions=True,
                                      authentication=SIMPLE)
+
+                print('LDAP init {}'.format(ctx))
                 ctx.open()
                 ctx.start_tls()
-                if not ctx.bind():
+                try:
+                    ctx.bind()
+                except:
                     raise ApplicationError('org.blue_labs.misty.ldap.error', 'Failed to bind')
+
                 break
 
             except (LDAPSessionTerminatedByServerError, LDAPSocketReceiveError):
@@ -165,8 +171,8 @@ class _Component(ApplicationSession): # this is the Provider class
     
     def __init__(self, realm:str, cfg:dict, loop, q:janus.Queue, event:threading.Event, join_future:asyncio.Future):
         super().__init__(ComponentConfig(realm, cfg))
-        self.log        = logging.getLogger()
-        self.log.info('big thick bro nuts!')
+        #self.log        = logging.getLogger()
+        self.log              = txaio.make_logger()
 
         self.realm            = realm
         self.cfg              = cfg
@@ -209,7 +215,7 @@ class _Component(ApplicationSession): # this is the Provider class
                 self.topic_subscribers[topic['uri']].append(subscriberid)
 
         except Exception as e:
-          print('fnucky: {} {}'.format(e.__class__, e))
+          print('awwshit (it happens): {} {}'.format(e.__class__, e))
 
 
     @asyncio.coroutine
@@ -224,7 +230,7 @@ class _Component(ApplicationSession): # this is the Provider class
         #except wamp.error.no_such_subscription:
         #    print('nss')
         except Exception as e:
-            print('fnucky: {} {}'.format(e.__class__,e))
+            print('awwshit (it happens): {} {}'.format(e.__class__,e))
 
 
     """ keep for TZ conversion notes
@@ -274,7 +280,7 @@ class _Component(ApplicationSession): # this is the Provider class
         self.log.debug('onConnect launch')
         try:
             self.close_reason = None
-            realm  = self.cfg.get('provider', 'realm')
+            realm  = self.cfg.get('WAMP', 'realm')
             userdn = self.cfg.get('authentication', 'userdn', fallback=None)
             authid = userdn.split(',')[0].split('=')[1]
         except Exception as e:
@@ -490,7 +496,7 @@ class _Component(ApplicationSession): # this is the Provider class
         enabled = d['enabled'] == True
 
         if not 0 <= zone <= 32:
-            raise ValueError('the fuck willis?')
+            raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
 
         ops = {'enabled': [(MODIFY_REPLACE, ['TRUE' if enabled else 'FALSE'])]}
 
@@ -521,9 +527,9 @@ class _Component(ApplicationSession): # this is the Provider class
             state    = d['state'] == True
 
             if not 0 <= zone <= 32:
-                raise ValueError('zone id out of spec')
+                raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
             if not toggle in ('manual','suspend'):
-                raise ValueError('unknown toggle')
+                raise ApplicationError('org.blue_labs.misty.value.error', 'unknown toggle method')
 
             end_time = []
             if state:
@@ -538,6 +544,7 @@ class _Component(ApplicationSession): # this is the Provider class
         except Exception as e:
             print('failed validity: {}'.format(e))
             traceback.print_exc()
+            raise ApplicationError('org.blue_labs.misty.value.error', 'field input verification rejected on provider')
 
         #print('toggle: {}'.format(toggle))
         swap_toggle = {'manual':'suspend','suspend':'manual'}[toggle]
@@ -591,11 +598,12 @@ class _Component(ApplicationSession): # this is the Provider class
             value     = d['value']
 
             if not 0 <= zone <= 32:
-                raise ValueError('zone id out of spec')
+                raise ApplicationError('org.blue_labs.misty.value.error', 'zone must be in range [0...32]')
 
         except Exception as e:
             print('failed validity: {}'.format(e))
             traceback.print_exc()
+            raise ApplicationError('org.blue_labs.misty.attribute.error', str(e))
 
         dn = 'zone={},{}'.format(zone, self.ldap_zone_dn_suffix)
         ops = {attribute: (MODIFY_REPLACE, [value])}
@@ -884,6 +892,7 @@ class _Component(ApplicationSession): # this is the Provider class
         except Exception as e:
             print('ermg: {}'.format(e))
             traceback.print_exc()
+            raise ApplicationError('org.blue_labs.misty.zone.add.error', str(e))
 
         self.push_pub('org.blue_labs.misty.zones', self.zones)
         return True
@@ -944,17 +953,18 @@ class Misty():
 
         exit_ = False
         for k in ('__version__','site_irl','realm','join timeout'):
-            if not (k in cfg['main'] or k in cfg['provider']):
+            if not (k in cfg['main'] or k in cfg['WAMP']):
                 exit_ = True
                 print("required config option '{}' not found".format(k))
 
         if exit_:
             raise KeyError('missing required config values')
 
-        self.realm          = cfg.get('provider','realm')
-        self.irl            = cfg.get('main','site_irl')
+        self.realm          = cfg.get('WAMP','realm')
+        self.irl            = cfg.get('WAMP','site_irl')
         self.client_version = cfg.get('main','__version__')
-        self.join_timeout   = int(cfg.get('main','join timeout'))
+        self.join_timeout   = int(cfg.get('WAMP','join timeout'))
+        self.node_name      = cfg.get('provider', 'node name')
         
         self._ldap = LDAP(cfg)
         
@@ -977,8 +987,6 @@ class Misty():
          b) don't set a signal handler for SIGTERM, also because we're not
             running in the main thread
         """
-
-        txaio.start_logging(level='trace')
 
         isSecure, host, port, resource, path, params = parse_url(self.irl)
         ssl = True
@@ -1543,9 +1551,9 @@ if __name__ == '__main__':
 
     # this provider is expecting to be started from the same CWD as crossbar was
     cfg = configparser.ConfigParser()
-    cfg.read('api.conf')
+    cfg.read('provider.conf')
 
-    irl = cfg.get('main', 'site_irl')
+    irl = cfg.get('WAMP', 'site_irl')
     if not irl:
         s = "section [main]; required config option '{}' not found".format('site_irl')
 
