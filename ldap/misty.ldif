@@ -25,16 +25,6 @@ cn: apimanager
 role: Provider
 realm: misty
 
-dn: ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
-objectClass: organizationalUnit
-ou: pi-nodes
-description: A RaspberryPi node with zones
-
-dn: ou=zones,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
-objectClass: organizationalUnit
-ou: zones
-description: Zones configured on a Pi node
-
 dn: uid=david,ou=People,ou=misty,dc=blue-labs,dc=org
 objectClass: top
 objectClass: shadowAccount
@@ -1135,14 +1125,24 @@ jpegPhoto:: /9j/4AAQSkZJRgABAQAAAQABAAD/4RE0RXhpZgAASUkqAAgAAAAMAAABBAABAAAAgA
  ZDVuZVMSDfDZXVi2DIabJCOSKcFuAIAKwIhEWIADZGCQQWjQEghiARoZsWRXgg9WSYqGmAsaWRFEM
  w1CaoGgVEPISAgSpDJVKOS6QMAGWNIBqiKB4/9k=
 
-dn: pi-node=backyard gardens,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
+dn: ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
+objectClass: organizationalUnit
+ou: pi-nodes
+description: A RaspberryPi node with zones
+
+dn: cn=backyard gardens,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
 objectClass: mistyNode
-pi-node: backyard gardens
+cn: backyard gardens
 node-description: Backyard Gardens
 manager-user: david
 viewer-user: *
 
-dn: zone=1,ou=zones,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
+dn: ou=zones,cn=backyard gardens,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
+objectClass: organizationalUnit
+ou: zones
+description: Zones configured on a Pi node
+
+dn: zone=1,ou=zones,cn=backyard gardens,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
 objectClass: mistyZone
 zone: 1
 pi-node: backyard gardens
@@ -1160,7 +1160,7 @@ wire-id: 4
 manual-on: FALSE
 zone-description: Patio garden
 
-dn: zone=2,ou=zones,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
+dn: zone=2,ou=zones,cn=backyard gardens,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
 objectClass: mistyZone
 zone: 2
 pi-node: backyard gardens
@@ -1178,7 +1178,7 @@ zone-description: Boxed gardens
 manual-on: FALSE
 running: FALSE
 
-dn: zone=3,ou=zones,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
+dn: zone=3,ou=zones,cn=backyard gardens,ou=pi-nodes,ou=misty,dc=blue-labs,dc=org
 objectClass: mistyZone
 zone: 3
 pi-node: backyard gardens
