@@ -814,6 +814,9 @@ class _Component(ApplicationSession): # this is the Provider class
         if not (isinstance(nz['zone'], int) and nz['zone'] in range(33)):
             bad_values.append(('invalid value','zone','zone id must be an integer in the set(0..31)'))
 
+        if not (isinstance(nz['pi-node'], str) and 0 < len(nz['pi-node']) < 256):
+            bad_values.append(('invalid value','pi-node','pi-node must be a string within length 1..255'))
+
         if not (isinstance(nz['wire_id'], int) and nz['wire_id'] in range(28)):
             bad_values.append(('invalid value','wire_id','wire id must be an integer in the set(0..27)'))
 
@@ -877,7 +880,7 @@ class _Component(ApplicationSession): # this is the Provider class
         nz['trigger-type']     = nz['trigger_type'];   del nz['trigger_type']
         nz['duration-type']    = nz['duration_type'];  del nz['duration_type']
 
-        dn = 'zone={},{}'.format(nz['zone'], self.ldap_zone_dn_suffix)
+        dn = 'zone={},ou=zones,cn={}'.format(nz['zone'], nz['pi-node'], self.ldap_zone_dn_suffix)
 
         try:
             self._ldap.ctx.add(dn, ['mistyZone'], nz)
@@ -895,8 +898,9 @@ class _Component(ApplicationSession): # this is the Provider class
     def _zones_delete_zone(self, nz, **args):
         print(nz)
 
+        warnings.warn('sanitize input')
         warnings.warn('check if user is authorized to modify per the pi node')
-        dn = 'zone={},{}'.format(nz['zone'], self.ldap_zone_dn_suffix)
+        dn = 'zone={},ou=zones,cn={}'.format(nz['zone'], nz['pi-node'], self.ldap_zone_dn_suffix)
 
         try:
             self._ldap.ctx.delete(dn)
@@ -1148,7 +1152,12 @@ class Misty():
              state          = str(GPIO.input(int(zone['wire-id'])) == zone['logic-state-when-active']).upper()
              ops['running'] = (MODIFY_REPLACE, [state])
 
-         dn = 'zone={},pi-node={},{}'.format(zone['zone'], self.pi_node, caller.ldap_zone_dn_suffix)
+         dn = 'zone={},ou=zones,cn={},{}'.format(zone['zone'], caller.pi_node, caller.ldap_zone_dn_suffix)
+
+         # future todo, ensure sanity of dn
+         # RFC-2849, make sure any pi-node name is safe for use
+         #dn = base64.b64encode(dn.encode()).decode()
+         #print('update b64dn: {}'.format(dn))
     
          caller._ldap.ctx.modify(dn, ops)
          #caller._ldap.rsearch(base   = self.ldap_zone_dn_suffix,
@@ -1381,17 +1390,16 @@ class Misty():
                     # state doesn't match what it should
                     print('  zone {} should be turned {}'.format(z, should_be))
 
-                    _ = {z: zones[z]}
-                    _['action']     = 'calendar'
-                    _['key']        = 'running'
-                    _[z]['running'] = z in running
-                    
-                    self._update_zone_in_ldap(self, _)
+                    zones[z]['running'] = z in running
+                    self._update_zone_in_ldap(self, zones[z])
                 
                     print('  dispatching')
 
                     # send to hardware module
-                    self.q.async_q.put_nowait(_)
+                    zones[z]['action']     = 'calendar'
+                    zones[z]['key']        = 'running'
+
+                    self.q.async_q.put_nowait(zones[z])
                     self.event.set()
                     self.event.wait()
                     self.event.clear()
