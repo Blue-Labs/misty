@@ -1,35 +1,108 @@
 <!doctype>
 <html>
 <head>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.0/jquery-ui.min.js"></script>
-  <script src="/js/misty.js"></script>
-  <script>AUTOBAHN_DEBUGxx = true; /* put this before we load autobahn.js */</script>
+
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
   <script src="//autobahn.s3.amazonaws.com/autobahnjs/latest/autobahn.min.jgz"></script>
-  <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.0/jquery-ui.min.css"/>
+  <script src="/js/misty.js"></script>
+
+  <script>AUTOBAHN_DEBUGxx = true; /* put this before we load autobahn.js */</script>
+
+  <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css" />
+
+  <!-- note, chrome breaks with "url()" in CSS. use a non-existing name if you want a url reference without content -->
   <link rel="stylesheet" type="text/css" href="/css/misty.css" />
   <link rel="stylesheet" type="text/css" href="/css/misty-svg.css" />
-  
+
+  <!-- note to self: example of dynamically added css file with filename ref
+  document.head.insertAdjacentHTML("beforeEnd", "<style>body{color:blue}/*# sourceURL=foo.css*/</style>");
+  -->
 
 </head>
+
 <body>
-<div class="body-bg"></div>
-<div class="page-box">
-  <div class="control-panel-box">
-    <div class="control-panel">
+
+  <div class="body-bg"></div>
+
+  <div class="control-panel">
+    <div class="panel-wrapper">
+      <!-- title, messages, spinner, and login components -->
+
+      <div class="pi-node tool-sidebar">
+        <span id="pi-node-cn">Backyard gardens doodly </span>
+      </div>
+
+      <div class="map-tools tool-sidebar">
+        <span class="tool-arrows">&#9664;&#9664;&#9664;</span>
+        <span class="map-tools-cn">Map tools</span>
+      </div>
 
       <div class="title">
         <h1>Misty</h1>
       </div>
 
+      <div class="api-messages">
+      </div>
+
       <div class="menu">
-      <div id="api-active-icon"></div>
+        <div id="api-active-icon"></div>
         <button disabled="disabled">Settings</button>
         <button disabled="disabled">Zone logs</button>
         <button disabled="disabled">Add Pi node</button>
         <button disabled="disabled">Add zone</button>
       </div>
 
+      <!-- user box -->
+      <div class="user-box">
+        <div class="anonymous-login">
+          <input type="text" id="username" name="username" placeholder="username"/>
+          <input type="password" id="password" name="password" placeholder="password"/>
+          <input type="button" id="login" name="login" value="login"/>
+        </div>
+
+        <div class="logged-in-profile">
+          <span class="department"></span>
+          <span class="username"></span>
+          <span class="icons">
+            <img src="/images/18px_logout.png" class="logout button" />
+          </span>
+          <span class="userpic"></span>
+          <span class="logout"></span>
+        </div>
+
+        <div class="please-log-in">
+          <p>Please log in</p>
+        </div>
+      </div>
+
+      <!-- api spinner -->
+      <div class="api-not-available">
+        <div id="api-na-container">
+          <div id="api-na-main">
+            <div id="api-na-outer-circle">
+              <div id="api-na-inner-circle">
+                <div id="api-na-center-circle">
+                  <div id="api-na-content">
+                    <p>Waiting for API &#x2026;</p>
+      </div></div></div></div></div></div></div>
+
+    </div>
+  </div>
+
+  <div class="page-box">
+    <div class="panel-wrapper">
+
+      <div class="zone-list-box">
+        <!-- zone programs -->
+        <h3>Zones</h3>
+        <br/> <!-- make a sidebar that dynamically updates based on the currently scrolled-to list of zones. sidebar will indicate which pi-node is in focus -->
+
+        <ul>
+        </ul>
+      </div>
+
+      <!-- zone graphic tools should slide out from the side -->
       <div class="zone-map-box">
         <!-- svg map -->
         <h3>Pi node Zone map</h3>
@@ -63,55 +136,9 @@
           </div>
         </div>
       </div>
-
-    </div>
-  </div>
-  <div class="zone-list-box">
-    <!-- user box -->
-    <span class="user-box">
-      <div class="anonymous-login">
-        <input type="text" id="username" name="username" placeholder="username"/>
-        <input type="password" id="password" name="password" placeholder="password"/>
-        <input type="button" id="login" name="login" value="login"/>
-      </div>
-      <div class="logged-in-profile">
-        <span class="department"></span>
-        <span class="username"></span>
-        <span class="icons">
-          <img src="/images/18px_logout.png" class="logout button" />
-        </span>
-        <span class="userpic"></span>
-        <span class="logout"></span>
-      </div>
-      <div class="please-log-in">
-        <p>Please log in</p>
-      </div>
-    </span>
-
-    <!-- api spinner -->
-    <div class="api-not-available">
-      <div id="api-na-container">
-        <div id="api-na-main">
-          <div id="api-na-outer-circle">
-            <div id="api-na-inner-circle">
-              <div id="api-na-center-circle">
-                <div id="api-na-content">
-                  <p>Waiting for API &#x2026;</p>
-    </div></div></div></div></div></div></div>
-
-    <div class="api-messages">
-      <div>
-      </div>
     </div>
 
-    <!-- zone programs -->
-    <h3>Zones
-    </h3>
-    <br/> <!-- build a tab choosable wrapper -->
-    <ul>
-    </ul>
   </div>
-</div>
 
 </body>
 

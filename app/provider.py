@@ -4,10 +4,10 @@ This is the standalone provider for crossbar that provides all the RPCs and pub/
 operations. We ONLY use asyncio here, no twisted.
 """
 
-__version__  = '1.9'
+__version__  = '2.0'
 __author__   = 'David Ford <david@blue-labs.org>'
 __email__    = 'david@blue-labs.org'
-__date__     = '2017-Feb-28 5:39z'
+__date__     = '2017-Mar-6 9:39z'
 __license__  = 'Apache 2.0'
 
 # ubjson emits an ImportWarning warning so import it now before we turn on warnings (imported in autobahn wamp serializers)
@@ -103,7 +103,7 @@ class LDAP():
     def retry_connect(self):
         deadtime = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         self.ctx = None
-        
+
         while deadtime > datetime.datetime.utcnow():
             try:
                 ca_file = '/etc/ssl/certs/ca-certificates.crt'
@@ -168,7 +168,7 @@ class _Component(ApplicationSession): # this is the Provider class
     cache = {}
     zones = {}
     topic_subscribers = {}
-    
+
     def __init__(self, realm:str, cfg:dict, loop, q:janus.Queue, event:threading.Event, join_future:asyncio.Future):
         super().__init__(ComponentConfig(realm, cfg))
         #self.log        = logging.getLogger()
@@ -181,7 +181,7 @@ class _Component(ApplicationSession): # this is the Provider class
         self.event            = event
         self.__join_future    = join_future
         self.__hardware_setup = False
-        
+
         self.ldap_zone_dn_suffix = cfg.get('zones', 'dn suffix')
 
 
@@ -325,7 +325,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
         # discard results, but trigger updates on UIs. this updates UIs to current state of things
         yield from self.call('org.blue_labs.misty.zones.research')
-        
+
         # this updates hardware and UIs to scheduled state of things
         self.event.set()
 
@@ -444,6 +444,19 @@ class _Component(ApplicationSession): # this is the Provider class
         return res
 
 
+    @wamp.register('org.blue_labs.misty.nodes.research')
+    def _nodes_research(self, **args):
+        detail = args['detail']
+        print('nodes.research(caller={})'.format(detail.caller))
+
+        @asyncio.coroutine
+        def f__g(detail):
+
+            self.push_pub('org.blue_labs.misty.pi-nodes', zones, options={'exclude':exc, 'eligible':[detail.caller]})
+
+        yield from f__g(detail)
+
+
     @wamp.register('org.blue_labs.misty.zones.research')
     def _zones_research(self, **args):
         detail = args['detail']
@@ -473,7 +486,7 @@ class _Component(ApplicationSession): # this is the Provider class
                     zones[z]['running'] = state == state_when_active
 
                     print('zone({}/gpio#{}) logic level: {}, active: {}'.format(z, zones[z]['wire-id'], state, v))
-                    
+
             except:
                 traceback.print_exc()
 
@@ -546,7 +559,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
         swap_toggle = {'manual':'suspend','suspend':'manual'}[toggle]
         swap_state  = not state
-        
+
         ops = {'{}-on'.format(toggle): (MODIFY_REPLACE, ['TRUE' if state else 'FALSE']),
                '{}-end-time'.format(toggle): (MODIFY_REPLACE, end_time),
               }
@@ -573,7 +586,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
         print('result is: {}'.format(zone))
         self.push_pub('org.blue_labs.misty.zones', {zone['zone']:zone})
-        
+
         zone['action'] = 'toggle'
         zone['key']    = toggle
         self.q.async_q.put_nowait(zone)
@@ -604,7 +617,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
         print('result is: {}'.format(zone))
         self.push_pub('org.blue_labs.misty.zones', {zone['zone']:zone})
-        
+
         return True
 
 
@@ -963,9 +976,9 @@ class Misty():
         self.client_version = cfg.get('main','__version__')
         self.join_timeout   = int(cfg.get('WAMP','join timeout'))
         self.pi_node        = cfg.get('provider', 'pi node')
-        
+
         self._ldap = LDAP(cfg)
-        
+
         self.ldap_zone_dn_suffix = cfg.get('zones', 'dn suffix')
 
         self.loop = asyncio.get_event_loop()
@@ -1116,21 +1129,21 @@ class Misty():
     def _hardware_setup(caller, channels):
         """
         channels:   a sequence of tuples in the form of (wire id, 'in' | 'out')
-        
+
         set up digital GPIO as IN or OUT per `channel' definitions.
         definitions should be in BCM (wire-id) form, at least for now ;)
         """
-    
+
         # NOTE. make sure you chown/chgrp however you need so the user running this script
         # is able to read/write to /dev/gpiomem
 
         GPIO.setmode(GPIO.BCM)
-        
+
         IN  = [int(ch) for ch,dio in channels if dio.lower() == 'in']
         OUT = [int(ch) for ch,dio in channels if dio.lower() == 'out']
         caller.log.info('hardware setup: {} set for input'.format(IN))
         caller.log.info('hardware setup: {} set for output'.format(OUT))
-        
+
         GPIO.setup(IN, GPIO.IN)
         GPIO.setup(OUT, GPIO.OUT)
 
@@ -1145,7 +1158,7 @@ class Misty():
          if isinstance(zone, int):
               print('got int zone, convert to dict')
               zone = caller.zones[zone]
-        
+
          print('do update with dict: {}'.format(zone))
 
          if update_wire_state:
@@ -1158,7 +1171,7 @@ class Misty():
          # RFC-2849, make sure any pi-node name is safe for use
          #dn = base64.b64encode(dn.encode()).decode()
          #print('update b64dn: {}'.format(dn))
-    
+
          caller._ldap.ctx.modify(dn, ops)
          #caller._ldap.rsearch(base   = self.ldap_zone_dn_suffix,
          #                     filter = '(zone={})'.format(zone['zone']),
@@ -1197,13 +1210,13 @@ class Misty():
 
                     if k in ('zone','wire-id'):
                         v = int(v)
-                
+
                     elif isinstance(v, datetime.datetime):
                         k+='_seconds'
                         v = (v - datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)).total_seconds()
-                    
+
                     zones[zoneid][k]=v
-                        
+
                 warnings.warn('we need a function to reduce something like "1245m" to 20h45m')
 
         except:
@@ -1242,10 +1255,10 @@ class Misty():
             print('zone {} epoch: {} for duration of {}'.format(z, begin.strftime('%m/%d-%H:%M'), duration))
             now = datetime.datetime.now().replace(second=0, microsecond=0)
             end = begin + duration
-            
+
             #print('now:   {}'.format(now))
             #print('begin: {}'.format(begin))
-            
+
             # if now - duration crosses midnight, roll begin back to the previous day and reset end
             if now < begin and (now - duration).day < now.day:
                 begin -= datetime.timedelta(days=1)
@@ -1292,7 +1305,7 @@ class Misty():
                 # find any zones that should be on per manual/calendar/sensor. skip suspended
                 for z in sorted(zones):
                     print('Check(zone={})'.format(z))
-                
+
                     if 'suspend-on' in zones[z] and zones[z]['suspend-on']:
                         print('  suspended')
                         continue
@@ -1305,7 +1318,7 @@ class Misty():
                         running[z]=True
                         print('  manually on')
                         continue
-                    
+
                     # must be programmed for remaining modes
                     if not zones[z]['programmed']:
                         print('  not programmed')
@@ -1319,16 +1332,16 @@ class Misty():
                         continue
 
                     if zones[z]['mode'] == 'independent':
-                        
+
                         if _epoch_contains_now(z, _get_epoch(zones[z]['epoch']), _get_duration(zones[z]['duration'])):
                             print('    epoch indicates: should be running')
                             running[z] = True
-                    
+
                     if zones[z]['mode'] in ('parallel','chained'):
                         # see if the parent that this follows is currently on
                         # which means this zone should be on too
                         parent = zones[z]['follows']
-                        
+
                         if zones[z]['mode'] == 'parallel':
                             if _epoch_contains_now(parent, _get_epoch(zones[parent]['epoch']), _get_duration(zones[parent]['duration'])):
                                 print('    epoch of parent (parallel) indicates: should be running')
@@ -1349,7 +1362,7 @@ class Misty():
 
             except:
                 traceback.print_exc()
-            
+
             print('Zones that should be ON:')
             for z in sorted(running):
                 print(' {:<2} {}'.format(z,zones[z]['zone-description']))
@@ -1386,13 +1399,13 @@ class Misty():
                     if is_active == should_be: # zone hardware state is current with intended state
                         #print('  zone is current')
                         continue
-                    
+
                     # state doesn't match what it should
                     print('  zone {} should be turned {}'.format(z, should_be))
 
                     zones[z]['running'] = z in running
                     self._update_zone_in_ldap(self, zones[z])
-                
+
                     print('  dispatching')
 
                     # send to hardware module
@@ -1410,9 +1423,9 @@ class Misty():
                         self.session.push_pub('org.blue_labs.misty.zones', __)
             except:
                 traceback.print_exc()
-            
+
             # calculate duration until next expected calendar event
-            
+
             # merge overlaps
             final = []
             now   = datetime.datetime.now()
@@ -1421,25 +1434,25 @@ class Misty():
             #print('before')
             for t in sorted(calendar_times):
                 print(t)
-            
+
             try:
-                
+
                 for s,e in calendar_times:
                     final.append(s)
                     final.append(e)
-                
+
                 final = sorted(set(final))
 
                 #for t in final:
                 #    print(' :: {}'.format(t))
-                
+
                 for t in final:
                     #print('testing {} > {}'.format(t,now))
                     if t>now:
                         #print('update to {}'.format(t))
                         next_=t
                         break
-                
+
                 if not next_: # we've cycled through all events for today so start at the first event tomorrow
                     next_ = final[0]+datetime.timedelta(hours=24)
 
@@ -1457,11 +1470,11 @@ class Misty():
         # calculate what our current state ought to be at this time of day/day of week etc
         # set the current relay states
         # now sit idle until we wake up via event which is either periodic, or triggered via wamp msg
-        
+
         # use the janus.Queue to safely talk across threads
         #self.q = janus.Queue(loop=self.loop)
         event_duration=60
-        
+
         while True:
             try:
                 self.event.wait(timeout=event_duration)
@@ -1470,7 +1483,7 @@ class Misty():
                 self.event.set()
                 self._shutdown = True
                 break
-            
+
             if self._shutdown:
                 break
 
@@ -1478,7 +1491,7 @@ class Misty():
                 z = self.q.async_q.get_nowait()
             except janus.AsyncQueueEmpty:
                 continue
-            
+
             print('received event:\n{}'.format(pprint.pformat(z)))
             sys.stdout.flush()
 
@@ -1486,24 +1499,24 @@ class Misty():
             key    = z['key']
             del z['action']
             del z['key']
-            
+
             #print('pre-list: {}'.format(z))
 
             #z=z[list(z.keys())[0]]
-            
+
             #print('\x1b[1;33mresponding to {}:{} event: {}\x1b[0m'.format(action,key,z))
             # when event fires, act accordingly, then calculate the duration to the next
             # event. such as a calendar event, or expiration of a timer
-            
+
             # we need a determinate for what type of action happened, manual? calendar? sensor?
             # on, or off? etc. much logic needed
-            
+
             state_when_active = z['logic-state-when-active'] if 'logic-state-when-active' in z else True
             print('set({}): state_when_active: {}'.format(z['zone'], state_when_active))
 
             # set the default state to off
             future_state = not state_when_active
-            
+
             if action == 'toggle':
                 if key in ('manual','suspend'):
                     state =z[key+'-on']
@@ -1511,32 +1524,32 @@ class Misty():
                     if action=='toggle' and key=='manual':
                         future_state = state_when_active if state else not state_when_active
                 print('set/toggle({}): future_state set to {}'.format(z['zone'], future_state))
-            
+
             elif action=='calendar':
                 if key == 'running':
                     future_state = state_when_active if z['running'] else not state_when_active
                     print('set/calendar({}): future_state set to {}'.format(z['zone'], future_state))
-            
+
             if 'suspend-on' in z and z['suspend-on']:
                 # ignore any changes in state, keep the zone turned off
                 future_state = not state_when_active
                 print('set/suspend({}): future_state set to {}'.format(z['zone'], future_state))
-            
+
             def _state_word(v):
                 return ['Off','On'][v == state_when_active]
-            
+
             wire_id = int(z['wire-id'])
             print('set/final({}) wire-id: {}, to {}/{}'.format(z['zone'], wire_id, future_state, _state_word(future_state)))
-            
+
             GPIO.setup(wire_id, GPIO.OUT)
             GPIO.output(wire_id, future_state)
-            
+
             # hardwired status loop, we need a self.zones perhaps?
             for c in (4,17,18,27):
                 GPIO.setup(c, GPIO.OUT)
                 v = GPIO.input(c)
                 print('gpio wire-id:{:>2} is {}'.format(c, _state_word(v)))
-        
+
         self.shutdown()
 
 

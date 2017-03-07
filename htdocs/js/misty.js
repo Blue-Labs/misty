@@ -97,7 +97,6 @@ $(document).ready(function(){
     }
 
     function get_role_details() {
-      console.log('smyrna');
       session.call(wamp_uri_base+'role.lookup').then(
         function(res) { draw_details(res); },
         function(err) { console.log(err);
@@ -190,11 +189,11 @@ $(document).ready(function(){
     if (reason === 'closed' || details.reason && details.reason === 'wamp.close.normal') {
       // someone logged out our session, either it was us, or another person logged in
       // as us somewhere else
-      $('span.user-box div.logged-in-profile').hide('slide', function() {
+      $('div.user-box div.logged-in-profile').hide('slide', function() {
         $.each(['department','username'], function(i,e) {
-          $('span.user-box div.logged-in-profile span.'+e).empty();
+          $('div.user-box div.logged-in-profile span.'+e).empty();
         });
-        $('span.user-box div.logged-in-profile span.userpic').css({backgroundImage:''});
+        $('div.user-box div.logged-in-profile span.userpic').css({backgroundImage:''});
       });
 
       fade_in_login();
@@ -204,7 +203,7 @@ $(document).ready(function(){
       console.warn('wamp.error.authentication_failed');
       console.warn(details.message);
       $('#api-na-content').html('Login needed');
-      $('span.user-box').addClass('auth-fail');
+      $('div.user-box').addClass('auth-fail');
       var error = details.message.match(/args=\[['"]?(.+?)['"]?\],/)[1];
       show_api_errors([error]);
     }
@@ -221,12 +220,12 @@ $(document).ready(function(){
 
 // fade in the login is called when we need the user to input their credentials
 function fade_in_login() {
-  $('span.user-box').css({zIndex:102});
-  $('span.user-box div.anonymous-login').slideDown(500, function() {
-    $('span.user-box div.please-log-in').slideDown(500, function() {
+  $('div.user-box').css({zIndex:102});
+  $('div.user-box div.anonymous-login').slideDown(500, function() {
+    $('div.user-box div.please-log-in').slideDown(500, function() {
       function fadeRunner(i) {
         if (i < 95) {
-          $('span.user-box').css({'background-color':'rgba(224,240,255,'+i/100+')'});
+          $('div.user-box').css({'background-color':'rgba(224,240,255,'+i/100+')'});
           setTimeout(fadeRunner, 3, i+1);
         }
       }
@@ -239,18 +238,18 @@ function fade_in_login() {
 function fade_out_login() {
   function fadeRunner(i) {
     if (i > 0) {
-      $('span.user-box').css({'background-color':'rgba(224,240,255,'+i/100+')'});
+      $('div.user-box').css({'background-color':'rgba(224,240,255,'+i/100+')'});
       setTimeout(fadeRunner, 3, i-1);
     }
   }
   fadeRunner(95);
-  $('span.user-box div.please-log-in').slideUp(250)
-  $('span.user-box').css({zIndex:100});
-  $('span.user-box div.anonymous-login').slideUp(250);
+  $('div.user-box div.please-log-in').slideUp(250)
+  $('div.user-box').css({zIndex:100});
+  $('div.user-box div.anonymous-login').slideUp(250);
 }
 
 function slide_in_profile(d) {
-  $('span.user-box div.logged-in-profile').find('span.userpic').css({
+  $('div.user-box div.logged-in-profile').find('span.userpic').css({
     backgroundImage:'url(data:image/png;base64,'+d.jpegPhoto[0],
   })
   .parent().find('span.department').text(d.department)
@@ -264,7 +263,7 @@ function register_creds() {
   ticket    = u['p'];
   principal = u['u'];
 
-  $('span.user-box').removeClass('failshadow');
+  $('div.user-box').removeClass('failshadow');
   $('#api-na-content').html('Logging in');
 
   // this = line is a workaround for a wamp-js bug. the authid gets lost :/
@@ -274,8 +273,8 @@ function register_creds() {
 }
 
 function get_login_creds() {
-  var u = $('span.user-box input#username').val(),
-      p = $('span.user-box input#password').val();
+  var u = $('div.user-box input#username').val(),
+      p = $('div.user-box input#password').val();
 
   return {'u':u, 'p':p};
 }
@@ -299,18 +298,18 @@ function resubscribe() {
 }
 
 function page_bindings_wamplogin(){
-  $(document).on('click', 'span.user-box input[type=button]#login', function(ev) {
+  $(document).on('click', 'div.user-box input[type=button]#login', function(ev) {
     ev.preventDefault();
     register_creds();
   });
 
-  $(document).on('keyup', 'span.user-box input', function(ev) {
+  $(document).on('keyup', 'div.user-box input', function(ev) {
     ev.preventDefault();
     if (ev.which !== 13) { return; }
     register_creds();
   });
 
-  $(document).on('click', 'span.user-box img.logout.button', function(ev) {
+  $(document).on('click', 'div.user-box img.logout.button', function(ev) {
     ev.preventDefault();
     // warning, this logs out all of your sessions in the SAME browser
     session.leave('wamp.close.logout');
@@ -319,7 +318,7 @@ function page_bindings_wamplogin(){
 
     document.cookie = 'cbtid'+'=; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
   });
-  
+
   $(document).on('click', 'span.zone-program-description', function(ev) {
     ev.stopPropagation();
     var descrip = $(this).text();
@@ -328,7 +327,7 @@ function page_bindings_wamplogin(){
     $(this).html(i);
     i.focus();
   });
-  
+
   $(document).on('keydown click', 'span.zone-program-description > textarea', function(ev) {
 
     ev.stopImmediatePropagation();
@@ -336,7 +335,7 @@ function page_bindings_wamplogin(){
     if (ev.type=='click') {
       return;
     }
-    
+
     if (ev.type=='keydown' && ev.which==13) {
       ev.preventDefault();
 
@@ -345,7 +344,7 @@ function page_bindings_wamplogin(){
         .find('span.zone-program-number')
         .text();
       var descrip = $(ev.target).val();
-      
+
       session.call(wamp_uri_base+'zone.set.attribute', [{'zone':zid, 'attribute':'zone-description', 'value':descrip},])
         .then(function(res) { $(ev.target).parent().text(descrip); },
               function(err) { console.log('result is err:', err); }
@@ -371,10 +370,12 @@ function page_bindings_misty() {
   });
 
   $(document).on('click', '.menu-button', function(event) {
+    console.log(c);
     event.preventDefault();
     var c = $(this).parent()
            .find('.circle')
            .toggleClass('open')
+
 
     // close the others
     $.each($('.circle.open'), function(i,e) {
@@ -468,7 +469,7 @@ function generate_zone_html(zone) {
   var existing = $('span.zone-program-number').filter(function() {
     return $(this).text() == zone.zone;
   }).closest('.zone-program-entry');
-  
+
   if (zone['mode']==='deleted' && existing != undefined) {
     $(existing).remove();
     return;
@@ -517,7 +518,7 @@ function generate_zone_html(zone) {
   }
 
   var e;
-  
+
   /* zone enabled */
   e = origin.find('.zone-program-status')
             .find('.enable-icon')
@@ -590,7 +591,7 @@ function generate_zone_html(zone) {
 function get_duration(callee) {
   var _this = callee.closest('span').find('.get-duration');
   var _path = callee.closest('.zone-program-entry').find('.timeout-path');
-  
+
   shit=callee;
   _this.addClass('active'); // make it visible
   _path.addClass('active'); // start the timer
@@ -659,7 +660,7 @@ function toggle_zone(zid, toggle) {
             .closest('.zone-program-entry')
             .find('.circle a[name='+toggle+']'),
       state = !e.hasClass('on');
-  
+
   if (state) {
     get_duration(e);
   } else {
