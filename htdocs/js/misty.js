@@ -15,8 +15,10 @@ var __license__  = 'Apache 2.0'
 
 var connection, session, principal, ticket,
     wamp_subscriptions = {
-      'org.blue_labs.misty.useradmin.set.attribute.result': wamp_cb_touchup,
+      'org.blue_labs.misty.nodes':subscribe_zones
     };
+
+      //'org.blue_labs.misty.useradmin.set.attribute.result': wamp_cb_touchup,
 
 function show_api_errors(errors) {
   var h = $.map(errors, function(v) {
@@ -120,8 +122,8 @@ $(document).ready(function(){
     }
 
     // set call back functions per uri
-    if (!(wamp_uri_base+'zones' in wamp_subscriptions)) {
-      wamp_subscriptions[wamp_uri_base+'zones'] = redraw_zones;
+    if (!(wamp_uri_base+'nodes' in wamp_subscriptions)) {
+      wamp_subscriptions[wamp_uri_base+'nodes'] = subscribe_zones;
     }
 
     resubscribe();
@@ -132,15 +134,9 @@ $(document).ready(function(){
         function (res) {
           //console.log('rpi.get.revision called, got',res);
 
-          // trigger the provider to send us a list of zones in case anything changed
-          session.call(wamp_uri_base+'zones.research').then(
-            function (res) {
-            },
-            function (error) {
-              console.log('error fetching zones.research',error);
-              setTimeout(ponderous_attach, 5000);
-            }
-          );
+          // trigger [each] provider that is alive to send us their name and a list of zone IDs
+          // they service
+          session.publish(wamp_uri_base+'nodes.research', [true]);
         },
         function (error) {
           console.log('error fetching rpi.get.revision',error);
@@ -370,7 +366,6 @@ function page_bindings_misty() {
   });
 
   $(document).on('click', '.menu-button', function(event) {
-    console.log(c);
     event.preventDefault();
     var c = $(this).parent()
            .find('.circle')
@@ -451,20 +446,59 @@ function page_bindings_misty() {
   });
 }
 
-function redraw_zones(args) {
-  var zones = args[0];
-
-  $.each(zones, function(i, zone) {
-    generate_zone_html(zone);
-  });
+/* base32 encode/decode SUBJ with a head and tail of underscore(s)
+*/
+function b32encode(subj) {
 }
 
-var shit;
-function generate_zone_html(zone) {
+function b32decode(subj) {
+}
+
+/* this function used to get all the zone data in one lump
+   now we iterate all the zones and subscribe to them. after
+   we subscribe to them, we'll request zone data for each
+   */
+function subscribe_zones(args) {
+  var pi_node = Object.keys(args[0])[0],
+      zones   = args[0][pi_node]['zones'],
+      topic;
+
+  console.log(pi_node, zones);
+
+  topic = wamp_uri_base+'node.'+pi_node;
+  console.log('subscribing to',topic);
+  wamp_subscriptions[topic] = generate_zone_html;
+
+  $.each(zones, function(i, zone) {
+    topic = wamp_uri_base+'node.'+pi_node+'.'+zone;
+    console.log('subscribing to',topic);
+    wamp_subscriptions[topic] = generate_zone_html;
+  });
+
+  resubscribe();
+
+/*  session.call(wamp_uri_base+'nodes.get', args[0]).then(
+        function(res) { console.log('got noms',res); },
+        function(err) { console.log(err);
+        if (err.error === 'wamp.error.no_such_procedure') {
+            // if no callee registered to handle this, then reschedule
+            console.warn(err);
+          } else {
+            console.warn(err);
+            show_api_errors([err]);
+          }
+        }
+      ); */
+}
+
+function generate_zone_html(data) {
   // if this zone doesn't already exist, create it
   // otherwise, ensure stats and indicators are updated
   // lastly, if mode of zone is 'deleted', then remove it
-  console.log('generating zone',zone);
+  //console.log('generating zone',zone);
+
+  console.log('generate_zone_html('+data+')');
+  return;
 
   var existing = $('span.zone-program-number').filter(function() {
     return $(this).text() == zone.zone;
@@ -506,7 +540,6 @@ function generate_zone_html(zone) {
         slice_pos = zn; console.log(zn, slice_pos);
       }
     });
-    shit = [origin, slice_pos];
 
     if (slice_pos < 0) {
       origin.append(_html);
@@ -557,6 +590,7 @@ function generate_zone_html(zone) {
   /* zone manually activated */
   e = origin.find('.zone-program-status')
             .find('.running-icon');
+            console.log()
   if (zone['manual-on']===true) {
     e.addClass('status-active');
     origin.find('.running-suspend').removeClass('on');
@@ -592,7 +626,6 @@ function get_duration(callee) {
   var _this = callee.closest('span').find('.get-duration');
   var _path = callee.closest('.zone-program-entry').find('.timeout-path');
 
-  shit=callee;
   _this.addClass('active'); // make it visible
   _path.addClass('active'); // start the timer
 
