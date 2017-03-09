@@ -4,10 +4,10 @@ This is the standalone provider for crossbar that provides all the RPCs and pub/
 operations. We ONLY use asyncio here, no twisted.
 """
 
-__version__  = '2.0'
+__version__  = '2.1'
 __author__   = 'David Ford <david@blue-labs.org>'
 __email__    = 'david@blue-labs.org'
-__date__     = '2017-Mar-6 9:39z'
+__date__     = '2017-Mar-9 1:39z'
 __license__  = 'Apache 2.0'
 
 # ubjson emits an ImportWarning warning so import it now before we turn on warnings (imported in autobahn wamp serializers)
@@ -123,7 +123,7 @@ class LDAP():
                                      raise_exceptions=True,
                                      authentication=SIMPLE)
 
-                print('LDAP init {}'.format(ctx))
+                #print('LDAP init: {}'.format(ctx))
                 ctx.open()
                 ctx.start_tls()
                 try:
@@ -207,7 +207,13 @@ class _Component(ApplicationSession): # this is the Provider class
         print('meta_on_subscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
+            print('self.sessionid is {}'.format(self.sessionid))
             print('\x1b[1;32m{} subscribed to {}\x1b[0m'.format(subscriberid, topic['uri']))
+
+            if subscriberid == self.sessionid:
+                # trigger an update of our internal zone knowledge, we intentionally don't
+                # exclude any clients so they get our zone knowledge as soon as we come alive
+                self.push_pub('org.blue_labs.misty.nodes.research', True, options={'exclude_me':False})
 
             if not topic['uri'] in self.topic_subscribers:
                 self.topic_subscribers[topic['uri']] = []
@@ -216,6 +222,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
         except Exception as e:
           print('awwshit (it happens): {} {}'.format(e.__class__, e))
+          traceback.print_exc()
 
 
     @asyncio.coroutine
@@ -305,6 +312,9 @@ class _Component(ApplicationSession): # this is the Provider class
     @asyncio.coroutine
     def onJoin(self, details):
         print('ClientSession onJoin:             {}',details)
+
+        self.sessionid = details.session
+
         if not self._ldap:
             self._ldap   = LDAP(self.cfg)
             self.pi_node = cfg.get('provider', 'pi node')
@@ -316,6 +326,7 @@ class _Component(ApplicationSession): # this is the Provider class
         yield from self.subscribe(self.meta_on_join, 'wamp.subscription.on_join')
         yield from self.subscribe(self.meta_on_subscribe, 'wamp.subscription.on_subscribe', options=SubscribeOptions(details_arg="details"))
         yield from self.subscribe(self.meta_on_unsubscribe, 'wamp.subscription.on_unsubscribe', options=SubscribeOptions(details_arg="details"))
+        #yield from self.subscribe(self.meta_on_unsubscribe, 'wamp.subscription.on_unsubscribe', options=SubscribeOptions(details_arg="details"))
 
         try:
             res = yield from self.subscribe(self, options=SubscribeOptions(match="prefix", details_arg='details'))
@@ -324,7 +335,8 @@ class _Component(ApplicationSession): # this is the Provider class
             print("could not subscribe procedures: {}".format(e))
 
         # discard results, but trigger updates on UIs. this updates UIs to current state of things
-        yield from self.call('org.blue_labs.misty.zones.research')
+        # do this in the on-subscribe meta instead since we're now async
+        #self.publish('org.blue_labs.misty.nodes.research', True)
 
         # this updates hardware and UIs to scheduled state of things
         self.event.set()
@@ -444,40 +456,34 @@ class _Component(ApplicationSession): # this is the Provider class
         return res
 
 
-    @wamp.register('org.blue_labs.misty.nodes.research')
-    def _nodes_research(self, **args):
-        detail = args['detail']
-        print('nodes.research(caller={})'.format(detail.caller))
+    @wamp.subscribe('org.blue_labs.misty.nodes.research')
+    def _nodes_research(self, *args, **kwargs):
+        ''' we're abusing crossbar and acting like this is a pub/sub, but in reality, it
+            is a parallel .call() endpoint. that is, we want each RPi provider to answer
+            when something is published here, and we'll generate and publish our pi-node
+            specific data. we completely ignore data sent to us.
+        '''
 
-        @asyncio.coroutine
-        def f__g(detail):
+        print('args: {}'.format(args))
+        print('kwargs: {}'.format(kwargs['details']))
 
-            self.push_pub('org.blue_labs.misty.pi-nodes', zones, options={'exclude':exc, 'eligible':[detail.caller]})
-
-        yield from f__g(detail)
-
-
-    @wamp.register('org.blue_labs.misty.zones.research')
-    def _zones_research(self, **args):
-        detail = args['detail']
-        print('zones.research(caller={})'.format(detail.caller))
+        detail    = kwargs['details']
+        publisher = detail.publisher
+        authid    = detail.publisher_authid
+        print('zones.research(publisher={} authid={})'.format(publisher, authid))
 
         @asyncio.coroutine
         def f__g(detail):
             try:
                 Misty._load_zone_data(self)
-                zones = self.zones
+                zones = self.nodezones[self.pi_node]['zones']
 
                 # run hardware setup
                 if not self.__hardware_setup:
                     Misty._hardware_setup(self, [(zones[z]['wire-id'],'in' if 'digital-input' in zones[z] and zones[z]['digital-input'] else 'out') for z in zones])
                     Misty.__hardware_setup = True
 
-                # if zone is configured as a relay, we need to make it an OUT type
-                # for now, just hardwire things as outputs
-                # also, if LOW means ON, we need to invert the state, this is a per
-                # zone value because we may have individual relay boards instead of
-                # groups
+                # update our internal state table to match actual hardware state
                 for z in sorted(zones):
                     wire_id             = int(zones[z]['wire-id'])
                     state               = GPIO.input(wire_id) == 1
@@ -485,19 +491,46 @@ class _Component(ApplicationSession): # this is the Provider class
                     v                   = str(state == state_when_active).upper()
                     zones[z]['running'] = state == state_when_active
 
-                    print('zone({}/gpio#{}) logic level: {}, active: {}'.format(z, zones[z]['wire-id'], state, v))
+                    print('{}: zone({}/gpio#{}) logic level: {}, active: {}'.format(self.pi_node, z, zones[z]['wire-id'], state, v))
 
             except:
                 traceback.print_exc()
 
+            '''
+            # * If manager-user attribute is not set for entry, all users
+            #   have access to the object
+            # * manager-user attribute will override viewer-user attribute
+            # * If manager-user attribute exists, only the specified users
+            #   will have r/w access
+            # * If viewer-user attribute exists, specified users (not in the
+            #   manager-user attribute) will have r/o access
+
+            # let crossbar handle authorization to subscribe to things. we'll
+            # post a dictionary of pi-nodes and zones on those nodes, then
+            # clients will subscribe to each entity. crossbar will permit or
+            # deny subscribing
+            '''
+
+            # instead of publishing all zone data to one topic, we'll publish
+            # specifically for each node/zone. this requires we build a character
+            # safe topic out of the node name
+            topic_node_name = b32(self.pi_node)
+
             try:
-                exc = [s for s in self.topic_subscribers['org.blue_labs.misty.zones'] if not s == detail.caller]
+                exc = [s for s in self.topic_subscribers[topic] if not s == detail.caller]
             except:         # sometimes this trigger comes in BEFORE the client subscription event fires which means
                 exc = None  # for the first subscriber, we don't know anything about this topic yet
 
-            self.push_pub('org.blue_labs.misty.zones', zones, options={'exclude':exc, 'eligible':[detail.caller]})
+            zones = [zone for zone in self.nodezones[self.pi_node]['zones']]
+            self.push_pub('org.blue_labs.misty.nodes', {topic_node_name:{'real name':self.pi_node, 'zones':zones}}, options={'exclude':exc, 'eligible':[publisher]})
 
         yield from f__g(detail)
+
+
+    @wamp.register('org.blue_labs.misty.nodes.get')
+    def _nodes_get(self, *args, **kwargs):
+        print('nodes.get args: {}'.format(args))
+        print('nodes.get kwargs: {}'.format(kwargs['details']))
 
 
     @wamp.register('org.blue_labs.misty.zone.set.enable')
@@ -570,7 +603,7 @@ class _Component(ApplicationSession): # this is the Provider class
             ops['{}-end-time'.format(swap_toggle)] = (MODIFY_REPLACE, [])
 
         else:
-            if self.zones[zone].get('running'):
+            if self.nodezones[zone].get('running'):
                 # state indicates OFF but zone is showing as running. clear the running flag
                 # this will have the effect of also terminating a calendar run, when manual is
                 # ended, if zone was started by calendar
@@ -687,7 +720,7 @@ class _Component(ApplicationSession): # this is the Provider class
             traceback.print_exc()
             raise
         """
-        ids = sorted([(int(e['attributes']['zone']),e['attributes']['zone-description']) for e in self.zones])
+        ids = sorted([(int(e['attributes']['zone']),e['attributes']['zone-description']) for e in self.nodezones])
         return ids
 
 
@@ -803,7 +836,7 @@ class _Component(ApplicationSession): # this is the Provider class
         pin_map = rv[0]['pin_out_group']
         print('pin map is: {}'.format(pin_map))
 
-        ids = sorted([int(z['attributes']['wire-id']) for z in self.zones])
+        ids = sorted([int(z['attributes']['wire-id']) for z in self.nodezones])
         return [ids,rv[0],gpiomap[pin_map]]
 
 
@@ -903,7 +936,7 @@ class _Component(ApplicationSession): # this is the Provider class
             traceback.print_exc()
             raise ApplicationError('org.blue_labs.misty.zone.add.error', str(e))
 
-        self.push_pub('org.blue_labs.misty.zones', self.zones)
+        self.push_pub('org.blue_labs.misty.zones', self.nodezones)
         return True
 
 
@@ -926,6 +959,12 @@ class _Component(ApplicationSession): # this is the Provider class
         self.push_pub('org.blue_labs.misty.zones', {nz['zone']:{'zone':nz['zone'], 'mode':'deleted'}})
         return True
 
+
+def b32encode(subj):
+    return '_____'+base64.b32encode(subj.encode()).lower().decode().replace('=','_')
+
+def b32encode(subj):
+    return base64.b32encode(subj[5:].replace('_','=').upper().encode()).decode()
 
 
 # configparser helpers
@@ -1155,59 +1194,75 @@ class Misty():
             ops = {}
 
         try:
-         if isinstance(zone, int):
-              print('got int zone, convert to dict')
-              zone = caller.zones[zone]
+            if isinstance(zone, int):
+                 print('got int zone, convert to dict')
+                 zone = caller.nodezones[pi_node][zone]
 
-         print('do update with dict: {}'.format(zone))
+            print('do update with dict: {}'.format(zone))
 
-         if update_wire_state:
-             state          = str(GPIO.input(int(zone['wire-id'])) == zone['logic-state-when-active']).upper()
-             ops['running'] = (MODIFY_REPLACE, [state])
+            if update_wire_state:
+                state          = str(GPIO.input(int(zone['wire-id'])) == zone['logic-state-when-active']).upper()
+                ops['running'] = (MODIFY_REPLACE, [state])
 
-         dn = 'zone={},ou=zones,cn={},{}'.format(zone['zone'], caller.pi_node, caller.ldap_zone_dn_suffix)
+            dn = 'zone={},ou=zones,cn={},{}'.format(zone['zone'], caller.pi_node, caller.ldap_zone_dn_suffix)
 
-         # future todo, ensure sanity of dn
-         # RFC-2849, make sure any pi-node name is safe for use
-         #dn = base64.b64encode(dn.encode()).decode()
-         #print('update b64dn: {}'.format(dn))
+            # future todo, ensure sanity of dn
+            # RFC-2849, make sure any pi-node name is safe for use
+            #dn = base64.b64encode(dn.encode()).decode()
+            #print('update b64dn: {}'.format(dn))
 
-         caller._ldap.ctx.modify(dn, ops)
-         #caller._ldap.rsearch(base   = self.ldap_zone_dn_suffix,
-         #                     filter = '(zone={})'.format(zone['zone']),
-         #                     scope  = LEVEL,
-         #                    )
-
-         # refresh caller's copy of zone data
-         Misty._load_zone_data(caller)
+            caller._ldap.ctx.modify(dn, ops)
+            # perhaps in the future, reload only affected zone?
+            Misty._load_zone_data(caller)
         except Exception as e:
-         traceback.print_exc()
+            traceback.print_exc()
 
-        return caller.zones[zone['zone']]
+        return caller.nodezones[pi_node][zone['zone']]
 
 
     @staticmethod
     def _load_zone_data(caller):
+        ''' load all the zone data for the RPi node this provider is running on
+        '''
         try:
-            caller._ldap.rsearch(filter='(&(zone=*)(pi-node={}))'.format(caller.pi_node))
+            caller._ldap.rsearch(filter='(&(objectClass=mistyNode)(cn={}))'.format(caller.pi_node))
         except Exception as e:
             print('fucknut: {}'.format(e))
+            traceback.print_exc()
             return
 
-        caller.zones = Misty._ldap_response_to_dict(caller._ldap.ctx.response)
+        nodes = Misty._ldap_response_to_dict(caller._ldap.ctx.response)
+
+        try:
+            caller._ldap.rsearch(filter='(&(objectClass=mistyZone)(pi-node={}))'.format(caller.pi_node))
+        except Exception as e:
+            print('fucknut: {}'.format(e))
+            traceback.print_exc()
+            return
+
+        zones = Misty._ldap_response_to_dict(caller._ldap.ctx.response)
+        nodes[caller.pi_node]['zones'] = zones
+
+        caller.nodezones = nodes
+        pprint.pprint(nodes)
 
 
     def _ldap_response_to_dict(response):
-        zones = {}
+        _dict = {}
         try:
             for d in response:
-                zoneid = int(d['attributes']['zone'])
-                zones[zoneid] = {}
-
-                for k,v in d['attributes'].items():
-                    if k == 'objectClass':
+                if 'objectClass' in d['attributes']:
+                    if 'mistyZone' in d['attributes']['objectClass']:
+                        _did = int(d['attributes']['zone'])
+                    elif 'mistyNode' in d['attributes']['objectClass']:
+                        _did = d['attributes']['cn'][0]
+                    else:
+                        print('response type not parseable: {}'.format(d))
                         continue
 
+                _dict[_did] = {}
+
+                for k,v in d['attributes'].items():
                     if k in ('zone','wire-id'):
                         v = int(v)
 
@@ -1215,14 +1270,14 @@ class Misty():
                         k+='_seconds'
                         v = (v - datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)).total_seconds()
 
-                    zones[zoneid][k]=v
+                    _dict[_did][k]=v
 
                 warnings.warn('we need a function to reduce something like "1245m" to 20h45m')
 
         except:
             traceback.print_exc()
 
-        return zones
+        return _dict
 
 
     def calendar(self):
@@ -1252,7 +1307,7 @@ class Misty():
 
 
         def _epoch_contains_now(z, begin, duration):
-            print('zone {} epoch: {} for duration of {}'.format(z, begin.strftime('%m/%d-%H:%M'), duration))
+            print('  zone {} epoch: {} with duration of {}'.format(z, begin.strftime('%m/%d-%H:%M'), duration))
             now = datetime.datetime.now().replace(second=0, microsecond=0)
             end = begin + duration
 
@@ -1269,16 +1324,16 @@ class Misty():
             e = end.strftime('%m/%d-%H:%M')
 
             if begin <= now < end:
-                print('   {}  \x1b[1;32m{}\x1b[0m  {}'.format(b,n,e))
+                print('    {}  \x1b[1;32m{}\x1b[0m  {}'.format(b,n,e))
                 return True
             else:
-                print('   {}  {}  {}'.format(b,n,e))
+                print('    {}  {}  {}'.format(b,n,e))
 
 
         # run hardware setup
         if not self.__hardware_setup:
             self._load_zone_data(self)
-            zones = self.zones
+            zones = self.nodezones
             self._hardware_setup(self, [(zones[z]['wire-id'],'in' if 'digital-input' in zones[z] and zones[z]['digital-input'] else 'out') for z in zones])
             self.__hardware_setup = True
 
@@ -1297,7 +1352,7 @@ class Misty():
 
             print('running calendar cycle')
             self._load_zone_data(self)
-            zones = self.zones
+            zones = self.nodezones
 
             try:
                 running={}
@@ -1432,8 +1487,8 @@ class Misty():
             next_ = None #now.replace(hour=0, minute=0, second=0, microsecond=0)
 
             #print('before')
-            for t in sorted(calendar_times):
-                print(t)
+            #for t in sorted(calendar_times):
+            #    print(t)
 
             try:
 
@@ -1544,7 +1599,7 @@ class Misty():
             GPIO.setup(wire_id, GPIO.OUT)
             GPIO.output(wire_id, future_state)
 
-            # hardwired status loop, we need a self.zones perhaps?
+            # hardwired status loop, we need a self.nodezones perhaps?
             for c in (4,17,18,27):
                 GPIO.setup(c, GPIO.OUT)
                 v = GPIO.input(c)

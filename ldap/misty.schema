@@ -188,16 +188,17 @@ attributetype ( mistyZonesAttributeType:1.2016.5.11.17
 
 attributetype ( mistyZonesAttributeType:1.2016.5.11.18
   NAME 'logic-state-when-active'
-  DESC 'Describes the signal level needed to activate this zone, TRUE=high(5v), FALSE=low(0v)'
+  DESC 'Describes the signal level needed to activate this zone, TRUE=high(3.3/5v), FALSE=low(0v)'
   EQUALITY booleanMatch
   SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
   SINGLE-VALUE )
 
 attributetype ( mistyZonesAttributeType:1.2016.5.11.19
-  NAME 'digital-in'
-  DESC 'Channels are GPIO.OUT by default, boolean TRUE makes this channel GPIO.IN'
-  EQUALITY booleanMatch
-  SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
+  NAME 'channel-type'
+  DESC 'Channels are DOUT (Digital Output; GPIO.OUT) by default, available types are "DOUT", "DIN", "I2C", "SPI", or "PWM"'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{4}
   SINGLE-VALUE )
 
 attributetype ( mistyZonesAttributeType:1.2016.5.11.20
@@ -208,6 +209,32 @@ attributetype ( mistyZonesAttributeType:1.2016.5.11.20
   SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
   SINGLE-VALUE )
 
+# Both manager-user and viewer-user follow these semantics:
+#
+# * If manager-user attribute is not set for entry, all users
+#   have access to the object
+# * manager-user attribute will override viewer-user attribute
+# * If manager-user attribute exists, only the specified users
+#   will have r/w access
+# * If viewer-user attribute exists, specified users (not in the
+#   manager-user attribute) will have r/o access
+
+attributetype ( mistyNodesAttributeType:1.2016.5.11.21
+  NAME 'manager-user'
+  DESC 'User authorized to make changes on this node'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  )
+
+attributetype ( mistyNodesAttributeType:1.2016.5.11.22
+  NAME 'viewer-user'
+  DESC 'User only permitted to view objects on this node'
+  EQUALITY caseIgnoreIA5Match
+  SUBSTR caseIgnoreIA5SubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+  )
+
 objectClass ( mistyZonesObjectClass:1.2016.5.11.1
   NAME 'mistyZone'
   DESC 'Misty Zones'
@@ -215,5 +242,6 @@ objectClass ( mistyZonesObjectClass:1.2016.5.11.1
   MUST ( zone $ wire-id $ zone-description $ enabled $ programmed $ running
          $ mode $ trigger-type $ trigger $ duration-type $ duration $ pi-node )
   MAY ( manual-on $ manual-end-time $ follows $ epoch $ suspend-on
-         $ suspend-end-time $ logic-state-when-active $ digital-in )
+         $ suspend-end-time $ logic-state-when-active $ channel-type
+         $ manager-user $ viewer-user )
   )

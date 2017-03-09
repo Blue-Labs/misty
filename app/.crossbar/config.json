@@ -25,14 +25,10 @@
                                     "uri": "org.blue_labs.misty.authenticate",
                                     "match": "exact",
                                     "allow": {
-                                        "call": false,
-                                        "register": true,
-                                        "publish": false,
-                                        "subscribe": false
+                                        "register": true
                                     },
                                     "disclose": {
-                                        "caller": true,
-                                        "publisher": false
+                                        "caller": true
                                     },
                                     "cache": true
                                 }
@@ -66,7 +62,7 @@
                                     }
                                 },
                                 {
-                                    "uri": "org.blue_labs.misty.zone.*",
+                                    "uri": "org.blue_labs.misty.nodes",
                                     "allow": {
                                         "register": true,
                                         "publish": true
@@ -77,9 +73,10 @@
                                     }
                                 },
                                 {
-                                    "uri": "org.blue_labs.misty.zones",
+                                    "uri": "org.blue_labs.misty.nodes.research",
                                     "allow": {
                                         "register": true,
+                                        "subscribe": true,
                                         "publish": true
                                     },
                                     "disclose": {
@@ -88,11 +85,10 @@
                                     }
                                 },
                                 {
-                                    "uri": "org.blue_labs.misty.zones.*",
+                                    "uri": "org.blue_labs.misty.nodezone.*",
                                     "allow": {
                                         "register": true,
-                                        "publish": true,
-                                        "call": true
+                                        "publish": true
                                     },
                                     "disclose": {
                                         "caller": true,
@@ -113,64 +109,24 @@
                             ]
                         },
                         {
-                            "name": "Client",
-                            "allow-by-default": true,
+                            "name": "authorizer",
                             "permissions": [
                                 {
-                                    "uri": "org.blue_labs.misty.role.*",
+                                    "uri": "org.blue_labs.misty.authorizer",
+                                    "match": "exact",
                                     "allow": {
-                                        "call": true
+                                        "register": true
                                     },
                                     "disclose": {
-                                        "caller": true,
-                                        "publisher": true
-                                    }
-                                },
-                                {
-                                    "uri": "org.blue_labs.misty.zone.*",
-                                    "allow": {
-                                        "subscribe": true,
-                                        "call": true
+                                        "caller": true
                                     },
-                                    "disclose": {
-                                        "caller": true,
-                                        "publisher": true
-                                    }
-                                },
-                                {
-                                    "uri": "org.blue_labs.misty.zones",
-                                    "allow": {
-                                        "subscribe": true,
-                                        "call": true
-                                    },
-                                    "disclose": {
-                                        "caller": true,
-                                        "publisher": true
-                                    }
-                                },
-                                {
-                                    "uri": "org.blue_labs.misty.zones.*",
-                                    "allow": {
-                                        "subscribe": true,
-                                        "call": true
-                                    },
-                                    "disclose": {
-                                        "caller": true,
-                                        "publisher": true
-                                    }
-                                },
-                                {
-                                    "uri": "org.blue_labs.misty.rpi.*",
-                                    "allow": {
-                                        "subscribe": true,
-                                        "call": true
-                                    },
-                                    "disclose": {
-                                        "caller": true,
-                                        "publisher": true
-                                    }
+                                    "cache": false
                                 }
                             ]
+                        },
+                        {
+                            "name": "Client",
+                            "authorizer": "org.blue_labs.misty.authorizer"
                         }
                     ]
                 }
@@ -228,6 +184,12 @@
                     "classname": "authenticator.AuthenticatorSession",
                     "realm": "authentication",
                     "role": "authenticator"
+                },
+                {
+                    "type": "class",
+                    "classname": "authorizer.AuthorizerSession",
+                    "realm": "misty",
+                    "role": "authorizer"
                 }
             ]
         }

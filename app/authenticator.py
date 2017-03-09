@@ -74,6 +74,7 @@ class LDAP():
         self.password    = ''
         self.log         = txaio.make_logger()
 
+
     def retry_connect(self):
         deadtime = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         self.ctx = None
@@ -145,7 +146,7 @@ class AuthenticatorSession(ApplicationSession):
                if not cfg.get('authentication', key):
                   s = "section [authentication]; required config option '{}' not found".format(key)
                   raise ApplicationError('org.blue_labs.misty.config.error',s)
-            
+
             if not cfg.get('WAMP', 'realm'):
                 s = "section [WAMP]; required config option 'realm' not found"
                 raise ApplicationError('org.blue_labs.misty.config.error',s)
