@@ -7,10 +7,10 @@ var wamp_uri_base = 'org.blue_labs.misty.';
 var realm = 'misty';
 
 // that's all. please leave the rest of this to me.
-var __version__  = 'version 1.10';
+var __version__  = 'version 2.0';
 var __author__   = 'David Ford <david@blue-labs.org>'
 var __email__    = 'david@blue-labs.org'
-var __date__     = '2016-Jul-26 04:33z'
+var __date__     = '2017-Mar-10 04:33z'
 var __license__  = 'Apache 2.0'
 
 var connection, session, principal, ticket,
@@ -457,22 +457,71 @@ function b32decode(subj) {
 /* this function used to get all the zone data in one lump
    now we iterate all the zones and subscribe to them. after
    we subscribe to them, we'll request zone data for each
+
+   if we don't have permission to view zones or devices, the
+   crossbar router will deny our subscription
+
+   as each answer comes in, create the initial object in
+   pi_nodes and mark it pending. as each set of zones is
+   received, mark it so. at the end of each zone we receive,
+   check if all pi-nodes have been marked received. if so,
+   regenerate all the html nodes.
    */
+var pi_nodes = {};
+
 function subscribe_zones(args) {
   var pi_node = Object.keys(args[0])[0],
+      name    = args[0][pi_node]['real name'],
       zones   = args[0][pi_node]['zones'],
       topic;
 
-  console.log(pi_node, zones);
+  console.log('zones to create:',zones);
+
+  pi_nodes[name] = {state:'pending',
+                    htmlZones:undefined,
+                    zones:{},
+                    timer:setTimeout(function(pn) {mark_received(pn);}, 10000, name)}; // set default
+                                                            // timer to fire in 10s.
+                                                            // if we have no permission to this
+                                                            // object, we'll never get responses
+
+  for (var z in zones) {
+    var zn = zones[z];
+    pi_nodes[name]['zones'][zn]={};
+  }
+
+  pi_nodes['aaaaa']={state:'received',
+                     htmlZones:undefined,
+                     zones:{
+                      1:{state:'received',
+                         'objectClass': ['mistyZone'],
+                         'zone': 11,
+                         'pi-node': 'Bramble yard',
+                         'trigger': '', 'trigger-type': 'time of day', 'mode': 'independent',
+                         'duration-type': '', 'enabled': true, 'programmed': true,
+                         'epoch': '07:30', 'duration': '30m', 'logic-state-when-active': false,
+                         'wire-id': 4, 'zone-description': 'Tgaraje', 'suspend-on': false, 'running': false},
+                      2:{state:'received',
+                         'objectClass': ['mistyZone'],
+                         'zone': 12,
+                         'pi-node': 'Bramble yard',
+                         'trigger': '', 'trigger-type': 'time of day', 'mode': 'independent',
+                         'duration-type': '', 'enabled': true, 'programmed': true,
+                         'epoch': '07:30', 'duration': '30m', 'logic-state-when-active': false,
+                         'wire-id': 4, 'zone-description': 'Tfuzz patch', 'suspend-on': false, 'running': false},
+                     },
+                     'real name': 'aaaa test node',
+                     'meta': {'node-description': 'Test test'},
+                     'b32uri': 'org.blue_labs.misty.node._____mjqwg23zmfzgiidhmfzmizloom______'};
 
   topic = wamp_uri_base+'node.'+pi_node;
-  console.log('subscribing to',topic);
-  wamp_subscriptions[topic] = generate_zone_html;
+  //console.log('subscribing to',topic);
+  wamp_subscriptions[topic] = receive_pi_node_data;
 
   $.each(zones, function(i, zone) {
     topic = wamp_uri_base+'node.'+pi_node+'.'+zone;
-    console.log('subscribing to',topic);
-    wamp_subscriptions[topic] = generate_zone_html;
+    //console.log('subscribing to',topic);
+    wamp_subscriptions[topic] = receive_zone_data;
   });
 
   resubscribe();
@@ -491,14 +540,106 @@ function subscribe_zones(args) {
       ); */
 }
 
+function receive_pi_node_data(data) {
+  data = data[0];
+  var pi_node = data['real name'];
+  //console.log('receive_pi_node_data('+pi_node+')',data);
+
+  pi_nodes[pi_node]['real name']=data['real name'];
+  pi_nodes[pi_node]['meta']=data['meta'];
+  pi_nodes[pi_node]['b32uri']=data['b32uri'];
+  pi_nodes[pi_node]['state']='received';
+
+  // update our timeout. we should expect all our zone data
+  // within a few milliseconds at this point. we'll send our
+  // receiver a special value to indicate all zones on this
+  // node should be marked as received when the timer fires
+  clearTimeout(pi_nodes[pi_node]['timer']);
+  pi_nodes[pi_node]['timer'] = setTimeout(function(pn) {mark_received(pn);}, 500, pi_node);
+
+  var pns = Object.keys(pi_nodes).sort();
+  for (var i in pns) {
+    //console.log(pi_nodes[pns[i]]);
+    // if the pi-node div doesn't exist, create it
+  }
+}
+
+
+// collect data and store in our local object
+function receive_zone_data(data) {
+
+  // if this function is called with 'false', skip to checking pending status
+  if (data !== false) {
+    data = data[0];
+    var pi_node = data['pi-node'];
+    var zone    = data['zone'];
+
+    pi_nodes[pi_node]['zones'][zone] = data;
+    pi_nodes[pi_node]['zones'][zone]['state']='received';
+  }
+
+  //console.log('received zone',zone);
+  check_all_received();
+}
+
+function mark_received(pi_node) {
+  console.info('marking received for',pi_node);
+
+  for (var z in pi_nodes[pi_node]['zones']) {
+    pi_nodes[pi_node]['zones'][z]['state'] = 'received'
+  }
+
+  pi_nodes[pi_node]['state'] = 'received';
+
+  clearTimeout(pi_nodes[pi_node]['timer']);
+  pi_nodes[pi_node]['timer'] = undefined;
+  console.log('cleared timeout for',pi_node);
+
+  check_all_received();
+}
+
+function check_all_received() {
+  var finished = true;
+
+  for (var pn in pi_nodes) {
+    if (pi_nodes[pn]['state'] !== 'received') {
+      finished = false;
+      break;
+    }
+
+    for (var z in pi_nodes[pn]['zones']) {
+      if (pi_nodes[pn]['zones'][z]['state'] !== 'received') {
+        finished = false;
+        break;
+      }
+    }
+  }
+
+  if (finished === true) {
+    // clear/reset a master timer on pi_nodes so we only redraw zone data once
+    // no matter how many threads fired through here
+    var t = pi_nodes['redraw timer'];
+    if (t !== undefined) { clearTimeout(t); }
+
+    // we're not waiting on anything, we can set this short
+    pi_nodes['redraw timer'] = setTimeout(redraw_zones, 50);
+  }
+  return finished;
+}
+
+function redraw_zones() {
+  console.log('redrawing zones');
+  pi_nodes['redraw timer'] = undefined;
+}
+
 function generate_zone_html(data) {
   // if this zone doesn't already exist, create it
   // otherwise, ensure stats and indicators are updated
   // lastly, if mode of zone is 'deleted', then remove it
   //console.log('generating zone',zone);
+  var zone = data[0];
 
-  console.log('generate_zone_html('+data+')');
-  return;
+  console.log('generate_zone_html()',zone);
 
   var existing = $('span.zone-program-number').filter(function() {
     return $(this).text() == zone.zone;

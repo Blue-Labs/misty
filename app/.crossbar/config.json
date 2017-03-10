@@ -85,6 +85,16 @@
                                     }
                                 },
                                 {
+                                    "uri": "org.blue_labs.misty.node.*",
+                                    "allow": {
+                                        "publish": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
                                     "uri": "org.blue_labs.misty.nodezone.*",
                                     "allow": {
                                         "register": true,

@@ -141,7 +141,6 @@ article, aside, details, figcaption, figure, footer, header, hgroup, nav, sectio
   flex:0 1 auto;
   align-self: auto;
   max-width: 45rem;
-  min-height: 100%;
   margin-left:.5rem;
 }
 
@@ -413,12 +412,12 @@ span.status-icon-overlay.running-manual.on {
   top:2rem;
   right:0;
   width:32px; height:32px;
-  background: url() no-repeat center center;
+  background: #fff no-repeat center center; // url()
 }
 
 .ui-dialog, .ui-dialog-titlebar, .ui-dialog-content, .ui-dialog-buttonpane, .ui-button,
 .ui-widget-content .ui-state-default, .new_zone input, .new_zone select {
-  background: #336 url() no-repeat center center;
+  background: #336 no-repeat center center; // url()
   border: 1px solid #558;
   color: #88e;
 }
@@ -471,7 +470,7 @@ span.status-icon-overlay.running-manual.on {
   margin-top:8px;
   margin-left:-12px;
   border:1px solid #558;
-  background: #336 url() no-repeat center center;
+  background: #336 no-repeat center center; // url()
   color: #88e;
 }
 

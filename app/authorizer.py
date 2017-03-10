@@ -133,7 +133,7 @@ def b32decode(subj):
 class AuthorizerSession(ApplicationSession):
     @inlineCallbacks
     def onJoin(self, details):
-        self.log.info("***********Dynamic authorizer joined: {}".format(details))
+        self.log.info("Dynamic authorizer joined: {}".format(details))
 
         try:
             self._ldap
@@ -177,36 +177,42 @@ class AuthorizerSession(ApplicationSession):
             'org.blue_labs.misty.nodes.research':{'publish':True},
         }
 
-        disclose = {'caller':True, 'publisher':True}
+        def answer(uri, action, perm, session):
+            color=['\x1b[1;31m','\x1b[1;32m'][perm]
+            s='{}/{}{}\x1b[0m/{}'.format(session['authid'], color, action, uri)
+            print(s)
+            return {'allow':perm, 'disclose':{'caller':True, 'publisher':True}}
+
+        if not uri.startswith('org.blue_labs.misty.'):
+            print('unknown URI prefix: {}'.format(uri))
+            return answer(uri, action, False, session)
+
+        # reform the topic
+        prefix      = uri[:20]
+        topic_parts = uri[20:].split('.')
+        try:
+            if topic_parts[1].startswith('_____') and topic_parts[1].endswith('_'):
+                x   = b32decode(topic_parts[1])
+                uri = topic_parts[0]+'.'+x
+                if len(topic_parts)>2:
+                     uri += '.' +'.'.join(topic_parts[2:])
+                uri = prefix+uri
+        except:
+            pass
 
         if uri in default_permissions:
             adic = default_permissions.get(uri)
             success = adic.get(action, False)
-            disclose = adic.get('disclose', disclose)
-            print('authorized {}/{} for {}'.format(action, uri, session['authid']))
-            return {'allow':success, 'disclose':disclose}
+            return answer(uri, action, success, session)
 
-        # not in a default, resolve it via ldap.
-
-        # lop off the front of the URI
-
-        if not uri.startswith('org.blue_labs.misty.'):
-            print('unknown URI prefix: {}'.format(uri))
-            return False
-
-        topic = uri[20:]
-        topic = topic.split('.')
-
-        print('split topic is: {}'.format(topic))
-
-        if topic[0] == 'node':
-            if topic[1].startswith('_____'):
+        if topic_parts[0] == 'node':
+            if len(topic_parts)>1 and topic_parts[1].startswith('_____'):
                 # lookup of a pi-node, or zone
-                pi_node = b32decode(topic[1])
+                pi_node = b32decode(topic_parts[1])
                 zone    = None
 
-                if len(topic)>2:
-                     zone = topic[2]
+                if len(topic_parts)>2:
+                     zone = topic_parts[2]
 
                 friendlyname = 'node.'+pi_node
                 if zone:
@@ -218,7 +224,7 @@ class AuthorizerSession(ApplicationSession):
                 # if 'manage-user' is present and authid is not in this list, user has RO access to modify pi-node
                 if len(self._ldap.ctx.response)>0:
                    perms = self._ldap.ctx.response[0]['attributes']
-                   print ('ldap node perms: {}'.format(perms))
+                   #print ('ldap node perms: {}'.format(perms))
                    mu = perms.get('manager-user')
                    vu = perms.get('viewer-user')
 
@@ -232,44 +238,36 @@ class AuthorizerSession(ApplicationSession):
 
                    if mu and session['authid'] in mu:
                         # user has RW access for everything on this pi
-                        print('authorized RW {}/{} for {}'.format(action, friendlyname, session['authid']))
-                        return {'allow':True, 'disclose':disclose}
+                        return answer(uri, action, True, session)
                    elif vu and session['authid'] in vu:
                         # user has RO to this pi-node, this is a read only function
-                        print('authorized RO {}/{} for {}'.format(action, friendlyname, session['authid']))
-                        return {'allow':True, 'disclose':disclose}
+                        return answer(uri, action, True, session)
                    elif vu and not session['authid'] in vu:
                         # user doesn't have RW, VU is present without user specified. no access
-                        print('authorized DENY {}/{} for {}'.format(action, friendlyname, session['authid']))
-                        return {'allow':False, 'disclose':disclose}
+                        return answer(uri, action, False, session)
                    elif zone is None:
                         # default permissions, everything is permitted
-                        print('authorized fallthru RW {}/{} for {}'.format(action, friendlyname, session['authid']))
-                        return {'allow':True, 'disclose':disclose}
+                        return answer(uri, action, True, session)
                    else:
                         # check specific zone controls
                         self._ldap.rsearch(filter='(&(objectClass=mistyZone)(zone={})(pi-node={}))'.format(zone,pi_node),
                                            attributes=['manager-user','viewer-user'])
                         perms = self._ldap.ctx.response[0]['attributes']
-                        print('ldap zone perms: {}'.format(perms))
+                        #print('ldap zone perms: {}'.format(perms))
                         mu = perms.get('manager-user')
                         vu = perms.get('viewer-user')
 
                         if mu and session['authid'] in mu:
-                            print('authorized RW {}/{} for {}'.format(action, friendlyname, session['authid']))
-                            return {'allow':True, 'disclose':disclose}
+                            return answer(uri, action, True, session)
                         elif vu and session['authid'] in vu:
                             # user has RO to this pi-node, this is a read only function
-                            print('authorized RO {}/{} for {}'.format(action, friendlyname, session['authid']))
-                            return {'allow':True, 'disclose':disclose}
+                            return answer(uri, action, True, session)
                         elif vu and not session['authid'] in vu:
                             # user doesn't have RW, VU is present without user specified. no access
-                            print('authorized DENY {}/{} for {}'.format(action, friendlyname, session['authid']))
-                            return {'allow':False, 'disclose':disclose}
+                            return answer(uri, action, False, session)
 
                 # failed all ACLs
-                print('failed all ACLs for {} to {} with {}'.format(session['authid'], action, friendlyname))
-                return {'allow':False, 'disclose':disclose}
+                return answer(uri, action, False, session)
 
 
         elif 'shizzle':

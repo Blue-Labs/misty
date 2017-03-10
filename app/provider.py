@@ -171,16 +171,16 @@ class _Component(ApplicationSession): # this is the Provider class
 
     def __init__(self, realm:str, cfg:dict, loop, q:janus.Queue, event:threading.Event, join_future:asyncio.Future):
         super().__init__(ComponentConfig(realm, cfg))
-        #self.log        = logging.getLogger()
-        self.log              = txaio.make_logger()
 
+        self.__join_future    = join_future
+        self.__hardware_setup = False
+
+        self.log              = txaio.make_logger()
         self.realm            = realm
         self.cfg              = cfg
         self.event_loop       = loop
         self.q                = q
         self.event            = event
-        self.__join_future    = join_future
-        self.__hardware_setup = False
 
         self.ldap_zone_dn_suffix = cfg.get('zones', 'dn suffix')
 
@@ -205,9 +205,9 @@ class _Component(ApplicationSession): # this is the Provider class
     @asyncio.coroutine
     def meta_on_subscribe(self, subscriberid, sub_details, details):
         print('meta_on_subscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
+
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
-            print('self.sessionid is {}'.format(self.sessionid))
             print('\x1b[1;32m{} subscribed to {}\x1b[0m'.format(subscriberid, topic['uri']))
 
             if subscriberid == self.sessionid:
@@ -215,14 +215,23 @@ class _Component(ApplicationSession): # this is the Provider class
                 # exclude any clients so they get our zone knowledge as soon as we come alive
                 self.push_pub('org.blue_labs.misty.nodes.research', True, options={'exclude_me':False})
 
-            if not topic['uri'] in self.topic_subscribers:
-                self.topic_subscribers[topic['uri']] = []
-            if not subscriberid in self.topic_subscribers[topic['uri']]:
-                self.topic_subscribers[topic['uri']].append(subscriberid)
-
         except Exception as e:
           print('awwshit (it happens): {} {}'.format(e.__class__, e))
           traceback.print_exc()
+
+        # for pi-node and zone channel topics, trigger a faked change so the new subscriber
+        # learns the data
+        if re.fullmatch('node\._____[a-z\d_]+(\.\d+|)', topic['uri'][20:]):
+            pi_node,*zone = topic['uri'][25:].split('.',1)
+            pi_node       = b32decode(pi_node)
+            zone          = zone[0] if zone else None
+            # see if the node matches me, if not, ignore
+            if pi_node == self.pi_node:
+                self._nodes_get(uri=topic['uri'], pi_node=pi_node, zone=zone, details=details)
+        else:
+            print('undirected subscribe: {}'.format(topic))
+
+
 
 
     @asyncio.coroutine
@@ -237,7 +246,7 @@ class _Component(ApplicationSession): # this is the Provider class
         #except wamp.error.no_such_subscription:
         #    print('nss')
         except Exception as e:
-            print('awwshit (it happens): {} {}'.format(e.__class__,e))
+            print(e.error)
 
 
     """ keep for TZ conversion notes
@@ -311,6 +320,13 @@ class _Component(ApplicationSession): # this is the Provider class
 
     @asyncio.coroutine
     def onJoin(self, details):
+        try:
+            if hasattr(self.__join_future, 'set_result'):
+                self.__join_future.set_result(details)
+                self.__join_future = None
+        except Exception as e:
+            print('failed to set __join_future: {}'.format(e))
+
         print('ClientSession onJoin:             {}',details)
 
         self.sessionid = details.session
@@ -347,12 +363,17 @@ class _Component(ApplicationSession): # this is the Provider class
 
     def onLeave(self, details):
         print("ClientSession left:               {}".format(details))
-        self.disconnect()
+        self.close_reason = details.reason
+        if not self.close_reason in ('wamp.close.logout','wamp.close.normal'):
+            print('unexpected communication loss from router:',self.close_reason)
+        else:
+            self.event_loop.stop()
 
 
     def onDisconnect(self):
         print('clientSession disconnected')
-        asyncio.get_event_loop().stop()
+        #asyncio.get_event_loop().stop()
+        super().onDisconnect()
 
 
     def onSubscribe(self, details):
@@ -514,7 +535,7 @@ class _Component(ApplicationSession): # this is the Provider class
             # instead of publishing all zone data to one topic, we'll publish
             # specifically for each node/zone. this requires we build a character
             # safe topic out of the node name
-            topic_node_name = b32(self.pi_node)
+            topic_node_name = b32encode(self.pi_node)
 
             try:
                 exc = [s for s in self.topic_subscribers[topic] if not s == detail.caller]
@@ -527,10 +548,29 @@ class _Component(ApplicationSession): # this is the Provider class
         yield from f__g(detail)
 
 
-    @wamp.register('org.blue_labs.misty.nodes.get')
+    @wamp.register('org.blue_labs.misty.node.get')
     def _nodes_get(self, *args, **kwargs):
-        print('nodes.get args: {}'.format(args))
-        print('nodes.get kwargs: {}'.format(kwargs['details']))
+        ''' This is READABLE information
+        '''
+        #if args:   print('nodes.get args: {}'.format(args))
+        #if kwargs: print('nodes.get kwargs: {}'.format(kwargs))
+
+        uri     = kwargs.get('uri')
+        pi_node = kwargs.get('pi_node')
+        zone    = kwargs.get('zone')
+
+        if not zone:
+            response = {'pi-node':True, 'real name':pi_node, 'meta':{}, 'b32uri':uri}
+            response['meta']['node-description'] = self.nodezones[pi_node]['node-description']
+            if 'manager-user' in self.nodezones:
+                response['meta']['manager-user'] = self.nodezones[pi_node]['manager-user']
+            if 'viewer-user' in self.nodezones:
+                response['meta']['viewer-user'] = self.nodezones[pi_node]['viewer-user']
+
+        else:
+            response = self.nodezones[pi_node]['zones'][int(zone)]
+
+        self.push_pub(uri, response)
 
 
     @wamp.register('org.blue_labs.misty.zone.set.enable')
@@ -963,8 +1003,8 @@ class _Component(ApplicationSession): # this is the Provider class
 def b32encode(subj):
     return '_____'+base64.b32encode(subj.encode()).lower().decode().replace('=','_')
 
-def b32encode(subj):
-    return base64.b32encode(subj[5:].replace('_','=').upper().encode()).decode()
+def b32decode(subj):
+    return base64.b32decode(subj[5:].replace('_','=').upper().encode()).decode()
 
 
 # configparser helpers
