@@ -20,8 +20,10 @@ My Pi nodes are built using Arch Linux, some are wired, some are wireless.
 
 ## Features
 * Based on Python 3, provider uses asyncio
-* Uses dynamic authentication for crossbar
-* Authenticates via LDAP account data
+* Crossbar components:
+  * dynamic authentication
+  * dynamic authorizer
+* Authenticates users via LDAP account data
 * Stores all zone information in LDAP
 * Provider runs WAMP thread as background thread, secondary to main process
 * Web UI currently designed for single Pi node but back end supports
@@ -49,9 +51,9 @@ My Pi nodes are built using Arch Linux, some are wired, some are wireless.
   *suspend* if a time frame is specified. subsequently, add an RPC to fetch
   calendar events so the web UI can show them accordingly on the applicable
   zone
-* add user authorization to make each pi node have a *manager-user*
-  attribute and a *viewer-user* attribute so *pi nodes* can be configured
-  to only be manageable by certain users, and read-only viewable by certain
+* add user authorization (done) to make each pi node have a *manager-user*
+  attribute and a *viewer-user* attribute (done) so *pi nodes* can be configured
+  to only be manageable by certain users (future), and read-only viewable by certain
   users. in the absence of these attributes, the *pi node* will be
   manageable by all users.
 * increase granularity of user authorization to make each zone per-user
@@ -107,12 +109,12 @@ and pi3 B+
   * if you've configured your LDAP server as needed, you should be able to
     run `ldapsearch -xLLL 'zone=3'` and get results matching the bottom of
     the included **misty.ldif**
-5. Install software using disto tools or python tools. test by attempting to
-    run **crossbar start** in the app directory, and **python -u provider.py**
+5. Install software using distribution tools or python tools. test by attempting
+    to run **crossbar start** in the app directory, and **python -u provider.py**
     on your pi. Ensure you have all necessary python modules before
     continuing
 6. Stop crossbar and provider
-7. Set LDAP passwords for the apimanager and your user
+7. Set LDAP passwords for the `apimanager` and your user
 8. Start the WAMP router in the app directory, **crossbar start**, and leave
     it running
 9. Start the provider, **python -u provider.py** in the same directory as
@@ -254,7 +256,7 @@ http {
         location / {
            root                 sites/misty.blue-labs.org/htdocs/;
            index                index.html;
-        }        
+        }
 
         location /ws {
             #proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -320,19 +322,36 @@ crossbar start
 ```
 
 You will see a few dozen lines of output. There should be no errors, no
-tracebacks, no indications of exceptions and when idle, the last few lines
+tracebacks, no indications of exceptions and when idle, the last several lines
 should resemble this:
 ```
-2017-02-27T23:55:40-0500 [Controller  13395] Router 'worker-001': component 'component-001' started
-2017-02-27T23:55:40-0500 [Router      13400] Loaded 0 cookie records from file. Cookie store has 0 entries.
-2017-02-27T23:55:40-0500 [Router      13400] File-backed cookie store active /etc/nginx/sites/misty.blue-labs.org/app/.crossbar/cookies.dat
-2017-02-27T23:55:40-0500 [Router      13400] Loading server TLS key from /etc/letsencrypt/live/misty.blue-labs.org/privkey.pem
-2017-02-27T23:55:40-0500 [Router      13400] Loading server TLS certificate from /etc/letsencrypt/live/misty.blue-labs.org/cert.pem
-2017-02-27T23:55:40-0500 [Router      13400] Loading server TLS chain certificate from /etc/letsencrypt/live/misty.blue-labs.org/chain.pem
-2017-02-27T23:55:40-0500 [Router      13400] Using explicit TLS ciphers from config
-2017-02-27T23:55:40-0500 [Router      13400] OpenSSL is using elliptic curve prime256v1 (NIST P-256)
-2017-02-27T23:55:40-0500 [Router      13400] Site (TLS) starting on 8080
-2017-02-27T23:55:40-0500 [Controller  13395] Router 'worker-001': transport 'transport-001' started
+2017-03-09T19:08:38-0500 [Controller  24493] Joined realm 'crossbar' on node management router
+2017-03-09T19:08:38-0500 [Controller  24493] Starting Router with ID 'worker-001'...
+2017-03-09T19:08:38-0500 [Router      24498] Worker process starting (CPython-EPollReactor) ..
+2017-03-09T19:08:39-0500 [Controller  24493] Router with ID 'worker-001' and PID 24498 started
+2017-03-09T19:08:39-0500 [Router      24498] Realm 'authentication' started
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': realm 'realm-001' (named 'authentication') started
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': role 'role-001' (named 'authenticator') started on realm 'realm-001'
+2017-03-09T19:08:39-0500 [Router      24498] Realm 'misty' started
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': realm 'realm-002' (named 'misty') started
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': role 'role-002' (named 'Provider') started on realm 'realm-002'
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': role 'role-003' (named 'authorizer') started on realm 'realm-002'
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': role 'role-004' (named 'Client') started on realm 'realm-002'
+2017-03-09T19:08:39-0500 [Router      24498] started component: authenticator.AuthenticatorSession id=1858000276719066
+2017-03-09T19:08:39-0500 [Router      24498] WAMP-Ticket dynamic authenticator registered
+2017-03-09T19:08:39-0500 [Controller  24493] Router 'worker-001': component 'component-001' started
+2017-03-09T19:08:39-0500 [Router      24498] started component: authorizer.AuthorizerSession id=3107983548066556
+2017-03-09T19:08:39-0500 [Router      24498] Dynamic authorizer joined: SessionDetails(realm=<misty>, session=3107983548066556, authid=<None>, authrole=<authorizer>, authmethod=None, authprovider=None, authextra=None, resumed=None, resumable=None, resume_token=None)
+2017-03-09T19:08:40-0500 [Controller  24493] Router 'worker-001': component 'component-002' started
+2017-03-09T19:08:40-0500 [Router      24498] Loaded 253 cookie records from file. Cookie store has 126 entries.
+2017-03-09T19:08:40-0500 [Router      24498] File-backed cookie store active /etc/nginx/sites/misty.blue-labs.org/app/.crossbar/cookies.dat
+2017-03-09T19:08:40-0500 [Router      24498] Loading server TLS key from /etc/letsencrypt/live/misty.blue-labs.org/privkey.pem
+2017-03-09T19:08:40-0500 [Router      24498] Loading server TLS certificate from /etc/letsencrypt/live/misty.blue-labs.org/cert.pem
+2017-03-09T19:08:40-0500 [Router      24498] Loading server TLS chain certificate from /etc/letsencrypt/live/misty.blue-labs.org/chain.pem
+2017-03-09T19:08:40-0500 [Router      24498] Using explicit TLS ciphers from config
+2017-03-09T19:08:40-0500 [Router      24498] OpenSSL is using elliptic curve prime256v1 (NIST P-256)
+2017-03-09T19:08:40-0500 [Router      24498] Site (TLS) starting on 8080
+2017-03-09T19:08:40-0500 [Controller  24493] Router 'worker-001': transport 'transport-001' started
 ```
 
 
