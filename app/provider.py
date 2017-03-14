@@ -41,7 +41,6 @@ import threading
 import subprocess
 
 import RPi.GPIO as GPIO
-GPIO.setwarnings(False)
 
 from ldap3 import Server
 from ldap3 import Connection
@@ -169,7 +168,8 @@ class _Component(ApplicationSession): # this is the Provider class
     zones = {}
     topic_subscribers = {}
 
-    def __init__(self, realm:str, cfg:dict, loop, q:janus.Queue, event:threading.Event, join_future:asyncio.Future):
+    def __init__(self, realm:str, cfg:dict, loop, rpi_hardware,
+                 q:janus.Queue, event:threading.Event, join_future:asyncio.Future):
         super().__init__(ComponentConfig(realm, cfg))
 
         self.__join_future    = join_future
@@ -183,6 +183,8 @@ class _Component(ApplicationSession): # this is the Provider class
         self.event            = event
 
         self.ldap_zone_dn_suffix = cfg.get('zones', 'dn suffix')
+
+        self.rpi_hardware     = rpi_hardware
 
 
     @asyncio.coroutine
@@ -214,6 +216,7 @@ class _Component(ApplicationSession): # this is the Provider class
                 # trigger an update of our internal zone knowledge, we intentionally don't
                 # exclude any clients so they get our zone knowledge as soon as we come alive
                 self.push_pub('org.blue_labs.misty.nodes.research', True, options={'exclude_me':False})
+                return
 
         except Exception as e:
           print('awwshit (it happens): {} {}'.format(e.__class__, e))
@@ -293,7 +296,6 @@ class _Component(ApplicationSession): # this is the Provider class
 
 
     def onConnect(self):
-        self.log.debug('onConnect launch')
         try:
             self.close_reason = None
             realm  = self.cfg.get('WAMP', 'realm')
@@ -302,16 +304,15 @@ class _Component(ApplicationSession): # this is the Provider class
         except Exception as e:
             traceback.print_exc()
 
-        print("ClientSession connected:          Joining realm <{}> with authid <{}>".format(realm if realm else 'not provided', authid))
+        print("ClientSession connected, joining realm <{}> with authid <{}>".format(realm if realm else 'not provided', authid))
         try:
             self.join(realm, ['ticket'], authid)
         except Exception as e:
             traceback.print_exc()
-        #self._ldap = LDAP(self.cfg) # called in onJoin()
 
 
     def onChallenge(self, challenge):
-        print("ClientSession challenge received: {}".format(challenge))
+        #print("ClientSession challenge received: {}".format(challenge))
         if challenge.method == 'ticket':
             return self.cfg.get('authentication', 'userpassword', fallback=None)
         else:
@@ -320,21 +321,16 @@ class _Component(ApplicationSession): # this is the Provider class
 
     @asyncio.coroutine
     def onJoin(self, details):
-        try:
-            if hasattr(self.__join_future, 'set_result'):
-                self.__join_future.set_result(details)
-                self.__join_future = None
-        except Exception as e:
-            print('failed to set __join_future: {}'.format(e))
-
-        print('ClientSession onJoin:             {}',details)
-
+        #print('ClientSession onJoin:             {}',details)
         self.sessionid = details.session
+        self.__join_future.set_result(details)
 
         if not self._ldap:
             self._ldap   = LDAP(self.cfg)
             self.pi_node = cfg.get('provider', 'pi node')
 
+        # TODO, figure out how to get all existing subscriptions, why? if there are connected
+        # clients, we'll ought to push out a notification that we've joined the realm
         sublist = yield from self.call('wamp.subscription.list')
         print('onjoin sublist:',sublist)
 
@@ -357,8 +353,6 @@ class _Component(ApplicationSession): # this is the Provider class
         # this updates hardware and UIs to scheduled state of things
         self.event.set()
 
-        self.__join_future.set_result(details)
-        self.__join_future = None
 
 
     def onLeave(self, details):
@@ -485,8 +479,8 @@ class _Component(ApplicationSession): # this is the Provider class
             specific data. we completely ignore data sent to us.
         '''
 
-        print('args: {}'.format(args))
-        print('kwargs: {}'.format(kwargs['details']))
+        #print('args: {}'.format(args))
+        #print('kwargs: {}'.format(kwargs['details']))
 
         detail    = kwargs['details']
         publisher = detail.publisher
@@ -499,12 +493,7 @@ class _Component(ApplicationSession): # this is the Provider class
                 Misty._load_zone_data(self)
                 zones = self.nodezones[self.pi_node]['zones']
 
-                # run hardware setup
-                if not self.__hardware_setup:
-                    Misty._hardware_setup(self, [(zones[z]['wire-id'],'in' if 'digital-input' in zones[z] and zones[z]['digital-input'] else 'out') for z in zones])
-                    Misty.__hardware_setup = True
-
-                # update our internal state table to match actual hardware state
+                # discover current [actual] state
                 for z in sorted(zones):
                     wire_id             = int(zones[z]['wire-id'])
                     state               = GPIO.input(wire_id) == 1
@@ -781,6 +770,7 @@ class _Component(ApplicationSession): # this is the Provider class
         # eventually make a function out of this
         # varies slightly depending on RPi version
         #GPIO -> Phys PIN
+
         gpiomap = {
           0: {
            0: 3,
@@ -1021,13 +1011,84 @@ def _cfg_List(config, section, key):
    return [x for x in v.replace(',', ' ').split(' ') if x]
 
 
-class Hardware:
-    name = ''
+class RPi_Hardware:
+    '''
+    currently this ONLY operates in BCM mode, don't try to use anything else
+    '''
+
+    name  = ''
+    type_ =  ''
+
+    hw            = {}
+    is_configured = False
+
+    def __init__(self, pin_map_mode=GPIO.BCM):
+        GPIO.setwarnings(False)
+        GPIO.setmode(pin_map_mode)
+
+    def new(self, bcm_pin, mode='digital-out', activate_level=True):
+        '''
+        bcm_pin may be an integer, or a list of tuples. the tuple set being the
+        integer pin number, IO direction, and boolean activation level.
+        '''
+
+        if not isinstance(bcm_pin, list):
+            bcm_pin = [(bcm_pin,mode,activate_level)]
+
+        for _pin,_mode,_alvl in bcm_pin:
+            if not isinstance(_pin, int):
+                _pin = int(_pin)
+
+            if _pin in self.hw:
+                raise KeyError
+
+            print('setting {} to {}/{}'.format(_pin, _mode, _alvl))
+            pin = RPi_GPIO_Pin(_pin)
+            pin.set_dio_direction(_mode)
+            if not _alvl:
+                pin.set_activate_level(False)
+
+            self.hw[_pin] = pin
+
+    def pin(self, pin):
+        if pin in self.hw:
+            return self.hw[pin]
+        else:
+            raise KeyError
 
 
-class Relay(Hardware):
-    def __init__(self):
-        pass
+
+class RPi_GPIO_Pin:
+    activate_level = True                        # logic level activation, True == 3.3/5v, False = 0v
+    io_direction   = GPIO.OUT                    # default is output
+    pin_number     = None
+
+    def __init__(self, pin_number):
+        self.pin_number = pin_number
+
+    def set_activate_level(self, level):
+        '''
+        Set the boolean value needed to make an output node activate
+        '''
+        self.activate_level = level
+
+    def set_dio_direction(self, direction):
+        '''
+        Set node type; input or output
+        '''
+        if direction == 'digital-out':
+            direction = GPIO.OUT
+        else:
+            direction = GPIO.IN
+
+        GPIO.setup(self.pin_number, direction)
+        self.io_direction = direction
+
+    def activate(self):
+        GPIO.out(self.pin_number, [GPIO.LOW, GPIO.HIGH][self.activate_level])
+
+    def deactivate(self):
+        GPIO.out(self.pin_number, [GPIO.LOW, GPIO.HIGH][~self.activate_level])
 
 
 # provider will run as a thread in the background, the foreground will be responsible
@@ -1056,9 +1117,22 @@ class Misty():
         self.join_timeout   = int(cfg.get('WAMP','join timeout'))
         self.pi_node        = cfg.get('provider', 'pi node')
 
-        self._ldap = LDAP(cfg)
+        self._ldap          = LDAP(cfg)
 
         self.ldap_zone_dn_suffix = cfg.get('zones', 'dn suffix')
+        self._load_zone_data(self)
+        #pprint.pprint(self.nodezones)
+
+        self.rpi_hardware   = RPi_Hardware()
+        self.rpi_hardware.new(bcm_pin=[(self.nodezones[node]['zones'][z]['wire-id'],
+                                        'digital-in' if 'digital-input' in self.nodezones[node]['zones'][z]
+                                            and self.nodezones[node]['zones'][z]['digital-input']
+                                            else 'digital-out',
+                                        self.nodezones[node]['zones'][z]['logic-state-when-active'])
+                                       for node in self.nodezones
+                                         for z in self.nodezones[node]['zones']])
+
+
 
         self.loop = asyncio.get_event_loop()
         self.q = janus.Queue(loop=self.loop)
@@ -1092,7 +1166,8 @@ class Misty():
                 try:
                     self.log.debug('Connecting to router ')
                     join_future       = asyncio.Future()
-                    session_factory   = functools.partial(_Component, self.realm, self.cfg, loop, self.q, self.event, join_future)
+                    session_factory   = functools.partial(_Component, self.realm, self.cfg, loop,
+                        self.rpi_hardware, self.q, self.event, join_future)
                     transport_factory = WampWebSocketClientFactory(
                         session_factory, url=self.irl, serializers=serializers, loop=loop)
 
@@ -1111,6 +1186,7 @@ class Misty():
                     self.log.warning('router connection timeout')
                     # absorb the concurrent.futures._base.CancelledError error
                     try:
+                        self.log.debug('\x1b[1;32mrouter online\x1b[0m')
                         await asyncio.wait([join_future])
                     except Exception as e:
                         self.log.critical('unexpected error while connecting to router: {}'.format(e))
@@ -1216,15 +1292,18 @@ class Misty():
         # NOTE. make sure you chown/chgrp however you need so the user running this script
         # is able to read/write to /dev/gpiomem
 
+        caller.log.warn('\x1b[1;32mhardware setup Z\x1b[0m')
+
         GPIO.setmode(GPIO.BCM)
 
         IN  = [int(ch) for ch,dio in channels if dio.lower() == 'in']
         OUT = [int(ch) for ch,dio in channels if dio.lower() == 'out']
-        caller.log.info('hardware setup: {} set for input'.format(IN))
-        caller.log.info('hardware setup: {} set for output'.format(OUT))
+        caller.log.info('hardware setup for {}: {} set for input'.format(caller, IN))
+        caller.log.info('hardware setup for {}: {} set for output'.format(caller, OUT))
 
         GPIO.setup(IN, GPIO.IN)
         GPIO.setup(OUT, GPIO.OUT)
+        caller.log.info('hardware setup finished for {}'.format(caller))
 
 
     @staticmethod
@@ -1236,7 +1315,7 @@ class Misty():
         try:
             if isinstance(zone, int):
                  print('got int zone, convert to dict')
-                 zone = caller.nodezones[pi_node][zone]
+                 zone = caller.nodezones[caller.pi_node]['zones'][zone]
 
             print('do update with dict: {}'.format(zone))
 
@@ -1257,7 +1336,7 @@ class Misty():
         except Exception as e:
             traceback.print_exc()
 
-        return caller.nodezones[pi_node][zone['zone']]
+        return caller.nodezones[caller.pi_node]['zones'][zone['zone']]
 
 
     @staticmethod
@@ -1284,7 +1363,8 @@ class Misty():
         nodes[caller.pi_node]['zones'] = zones
 
         caller.nodezones = nodes
-        pprint.pprint(nodes)
+        #print('refreshed nodezones for {}'.format(caller))
+        #pprint.pprint(nodes)
 
 
     def _ldap_response_to_dict(response):
@@ -1324,6 +1404,7 @@ class Misty():
         # set initial duration to wait forever. when our session has joined, we'll trigger the event
         # and let the calendar start running
         # reload the zone data and turn on/off per schedule, then calculate duration to wake up from
+        self.log.debug('\x1b[1;32mcalendar started\x1b[0m')
 
         def _get_epoch(s):
             if not s:
@@ -1370,13 +1451,6 @@ class Misty():
                 print('    {}  {}  {}'.format(b,n,e))
 
 
-        # run hardware setup
-        if not self.__hardware_setup:
-            self._load_zone_data(self)
-            zones = self.nodezones
-            self._hardware_setup(self, [(zones[z]['wire-id'],'in' if 'digital-input' in zones[z] and zones[z]['digital-input'] else 'out') for z in zones])
-            self.__hardware_setup = True
-
         event_duration=None
 
         while True:
@@ -1392,7 +1466,7 @@ class Misty():
 
             print('running calendar cycle')
             self._load_zone_data(self)
-            zones = self.nodezones
+            zones = self.nodezones[self.pi_node]['zones']
 
             try:
                 running={}
@@ -1587,8 +1661,8 @@ class Misty():
             except janus.AsyncQueueEmpty:
                 continue
 
-            print('received event:\n{}'.format(pprint.pformat(z)))
-            sys.stdout.flush()
+            print('received event: {} sets {} for {}:{}'.format(z['action'],z['key'],z['zone'],z['zone-description']))
+            #sys.stdout.flush()
 
             action = z['action']
             key    = z['key']
