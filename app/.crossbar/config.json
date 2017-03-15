@@ -73,6 +73,17 @@
                                     }
                                 },
                                 {
+                                    "uri": "org.blue_labs.misty.zones",
+                                    "allow": {
+                                        "register": true,
+                                        "publish": true
+                                    },
+                                    "disclose": {
+                                        "caller": true,
+                                        "publisher": true
+                                    }
+                                },
+                                {
                                     "uri": "org.blue_labs.misty.nodes.research",
                                     "allow": {
                                         "register": true,

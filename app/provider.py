@@ -495,6 +495,9 @@ class _Component(ApplicationSession): # this is the Provider class
 
                 # discover current [actual] state
                 for z in sorted(zones):
+                    zones[z]['running'] = self.rpi_hardware.pin(zones[z]['wire-id']).get_active()
+
+                    '''
                     wire_id             = int(zones[z]['wire-id'])
                     state               = GPIO.input(wire_id) == 1
                     state_when_active   = zones[z]['logic-state-when-active'] if 'logic-state-when-active' in zones[z] else True
@@ -502,6 +505,7 @@ class _Component(ApplicationSession): # this is the Provider class
                     zones[z]['running'] = state == state_when_active
 
                     #print('{}: zone({}/gpio#{}) logic level: {}, active: {}'.format(self.pi_node, z, zones[z]['wire-id'], state, v))
+                    '''
 
             except:
                 traceback.print_exc()
@@ -1033,6 +1037,10 @@ class RPi_Hardware:
         '''
         bcm_pin may be an integer, or a list of tuples. the tuple set being the
         integer pin number, IO direction, and boolean activation level.
+
+        adding a new pin does not change state on the pin, it will remain at the
+        logic level prior to adding. activate/deactivate/set_state() after adding
+        the new pin to change it's electrical state
         '''
 
         if not isinstance(bcm_pin, list):
@@ -1045,7 +1053,6 @@ class RPi_Hardware:
             if _pin in self.hw:
                 raise KeyError
 
-            print('setting {} to {}/{}'.format(_pin, _mode, _alvl))
             pin = RPi_GPIO_Pin(_pin)
             pin.set_dio_direction(_mode)
             if not _alvl:
@@ -1088,10 +1095,23 @@ class RPi_GPIO_Pin:
         self.io_direction = direction
 
     def activate(self):
-        GPIO.out(self.pin_number, [GPIO.LOW, GPIO.HIGH][self.activate_level])
+        state = [GPIO.LOW, GPIO.HIGH][self.activate_level]
+        print('setting pin {} to {}'.format(self.pin_number, state))
+        GPIO.output(self.pin_number, state)
 
     def deactivate(self):
-        GPIO.out(self.pin_number, [GPIO.LOW, GPIO.HIGH][~self.activate_level])
+        state = [GPIO.LOW, GPIO.HIGH][~self.activate_level]
+        print('setting pin {} to {}'.format(self.pin_number, state))
+        GPIO.output(self.pin_number, state)
+
+    def set_active(self, state):
+        state = [GPIO.LOW, GPIO.HIGH][state == self.activate_level]
+        print('setting pin {} to {}'.format(self.pin_number, state))
+        GPIO.output(self.pin_number, state)
+
+    def get_active(self):
+        state = GPIO.input(self.pin_number)
+        return state == self.activate_level
 
 
 # provider will run as a thread in the background, the foreground will be responsible
@@ -1183,7 +1203,7 @@ class Misty():
                 else:
                     try:
                         # Connection established; wait for onJoin to finish
-                        self.session_details = await asyncio.wait_for(join_future, timeout=60.0, loop=loop)
+                        self.session_details = await asyncio.wait_for(join_future, timeout=10.0, loop=loop)
                         self.session = protocol._session
                         self.transport_copy = transport
                         break
@@ -1229,12 +1249,17 @@ class Misty():
                 loop.run_forever()
                 if self.session.close_reason:
                     self.log.warning('session close reason: {}'.format(self.session.close_reason))
-                    try:
-                        self.transport_copy.close()
-                    except:
-                        pass
+                try:
+                    self.transport_copy.close()
+                except:
+                    pass
             except Exception as e:
+                self.log.critical('unexpected exception: {}'.format(e))
                 self.log.critical(traceback.format_exc())
+                try:
+                    self.transport_copy.close()
+                except:
+                    pass
 
             if self.session.close_reason == 'wamp.close.transport_lost':
                 continue
@@ -1543,25 +1568,23 @@ class Misty():
                     state_when_active = zones[z]['logic-state-when-active'] if 'logic-state-when-active' in zones[z] else True
                     sys.stdout.flush()
 
-                    wire_id = int(zones[z]['wire-id'])
-                    #GPIO.setup(wire_id, GPIO.OUT) # should not be needed
-                    logic_state = GPIO.input(wire_id)
-                    is_active   = ['Off','On'][logic_state == state_when_active]
-                    should_be   = ['Off','On'][z in running]
+                    wire_id     = int(zones[z]['wire-id'])
+                    is_active   = self.rpi_hardware.pin(wire_id).get_active()
 
-                    print('zone {}, wire-id {}; is digital state: {}({}) and should be: {}'.format(
-                        z, wire_id, logic_state, is_active, should_be))
+                    is_active   = ['Off','Active'][is_active]
+                    should_be   = ['Off','Active'][z in running]
+
+                    print('zone {}, wire-id {}; is {} and should be: {}'.format(
+                        z, wire_id, is_active, should_be))
                     if is_active == should_be: # zone hardware state is current with intended state
                         #print('  zone is current')
                         continue
 
                     # state doesn't match what it should
-                    print('  zone {} should be turned {}'.format(z, should_be))
+                    print('  zone {} should be {}'.format(z, should_be))
 
                     zones[z]['running'] = z in running
                     self._update_zone_in_ldap(self, zones[z])
-
-                    print('  dispatching')
 
                     # send to hardware module
                     zones[z]['action']     = 'calendar'
@@ -1647,7 +1670,7 @@ class Misty():
             except janus.AsyncQueueEmpty:
                 continue
 
-            print('received event: {} sets {} for {}:{}'.format(z['action'],z['key'],z['zone'],z['zone-description']))
+            print('received event: {} changing {}->{} for {}:{}'.format(z['action'],z['key'],z[z['key']],z['zone'],z['zone-description']))
             #sys.stdout.flush()
 
             action = z['action']
@@ -1667,7 +1690,7 @@ class Misty():
             # on, or off? etc. much logic needed
 
             state_when_active = z['logic-state-when-active'] if 'logic-state-when-active' in z else True
-            print('set({}): state_when_active: {}'.format(z['zone'], state_when_active))
+            #print('set({}): state_when_active: {}'.format(z['zone'], state_when_active))
 
             # set the default state to off
             future_state = not state_when_active
@@ -1678,32 +1701,25 @@ class Misty():
 
                     if action=='toggle' and key=='manual':
                         future_state = state_when_active if state else not state_when_active
-                print('set/toggle({}): future_state set to {}'.format(z['zone'], future_state))
+                #print('set/toggle({}): future_state set to {}'.format(z['zone'], future_state))
 
             elif action=='calendar':
                 if key == 'running':
                     future_state = state_when_active if z['running'] else not state_when_active
-                    print('set/calendar({}): future_state set to {}'.format(z['zone'], future_state))
+                    #print('set/calendar({}): future_state set to {}'.format(z['zone'], future_state))
 
             if 'suspend-on' in z and z['suspend-on']:
                 # ignore any changes in state, keep the zone turned off
                 future_state = not state_when_active
-                print('set/suspend({}): future_state set to {}'.format(z['zone'], future_state))
+                #print('set/suspend({}): future_state set to {}'.format(z['zone'], future_state))
 
             def _state_word(v):
                 return ['Off','On'][v == state_when_active]
 
             wire_id = int(z['wire-id'])
-            print('set/final({}) wire-id: {}, to {}/{}'.format(z['zone'], wire_id, future_state, _state_word(future_state)))
+            #print('set/final({}) wire-id: {}, to {}/{}'.format(z['zone'], wire_id, future_state, _state_word(future_state)))
 
-            GPIO.setup(wire_id, GPIO.OUT)
-            GPIO.output(wire_id, future_state)
-
-            # hardwired status loop, we need a self.nodezones perhaps?
-            for c in (4,17,18,27):
-                GPIO.setup(c, GPIO.OUT)
-                v = GPIO.input(c)
-                print('gpio wire-id:{:>2} is {}'.format(c, _state_word(v)))
+            self.rpi_hardware.pin(wire_id).set_active(z['running'])
 
         self.shutdown()
 
