@@ -76,6 +76,7 @@ from autobahn.wamp.types     import SubscribeOptions
 from autobahn.asyncio.wamp   import ApplicationSession
 from autobahn.asyncio.wamp   import ApplicationRunner
 from autobahn.wamp.exception import ApplicationError
+from autobahn.wamp.exception import TransportLost
 
 from autobahn.websocket.util import parse_url
 from autobahn.asyncio.websocket import WampWebSocketClientFactory
@@ -356,18 +357,17 @@ class _Component(ApplicationSession): # this is the Provider class
 
 
     def onLeave(self, details):
-        print("ClientSession left:               {}".format(details))
+        self.log.debug("ClientSession left: {}".format(details))
         self.close_reason = details.reason
         if not self.close_reason in ('wamp.close.logout','wamp.close.normal'):
-            print('unexpected communication loss from router:',self.close_reason)
-        else:
-            self.event_loop.stop()
+            self.log.warning('unexpected communication loss from router: {}'.format(self.close_reason))
 
 
     def onDisconnect(self):
         print('clientSession disconnected')
-        #asyncio.get_event_loop().stop()
         super().onDisconnect()
+        #asyncio.get_event_loop().stop()
+        self.event_loop.stop()
 
 
     def onSubscribe(self, details):
@@ -501,7 +501,7 @@ class _Component(ApplicationSession): # this is the Provider class
                     v                   = str(state == state_when_active).upper()
                     zones[z]['running'] = state == state_when_active
 
-                    print('{}: zone({}/gpio#{}) logic level: {}, active: {}'.format(self.pi_node, z, zones[z]['wire-id'], state, v))
+                    #print('{}: zone({}/gpio#{}) logic level: {}, active: {}'.format(self.pi_node, z, zones[z]['wire-id'], state, v))
 
             except:
                 traceback.print_exc()
@@ -1013,6 +1013,9 @@ def _cfg_List(config, section, key):
 
 class RPi_Hardware:
     '''
+    NOTE. make sure you chown/chgrp however you need so the user running this script
+    is able to read/write to /dev/gpiomem
+
     currently this ONLY operates in BCM mode, don't try to use anything else
     '''
 
@@ -1177,32 +1180,35 @@ class Misty():
                 except Exception as e:
                     traceback.print_exc()
 
-                try:
-                    # Connection established; wait for onJoin to finish
-                    self.session_details = await asyncio.wait_for(join_future, timeout=60.0, loop=loop)
-                    self.session = protocol._session
-                    break
-                except (asyncio.TimeoutError,):
-                    self.log.warning('router connection timeout')
-                    # absorb the concurrent.futures._base.CancelledError error
+                else:
                     try:
-                        self.log.debug('\x1b[1;32mrouter online\x1b[0m')
-                        await asyncio.wait([join_future])
-                    except Exception as e:
-                        self.log.critical('unexpected error while connecting to router: {}'.format(e))
+                        # Connection established; wait for onJoin to finish
+                        self.session_details = await asyncio.wait_for(join_future, timeout=60.0, loop=loop)
+                        self.session = protocol._session
+                        self.transport_copy = transport
+                        break
+                    except (asyncio.TimeoutError,):
+                        self.log.warning('router connection timeout')
+                        # absorb the concurrent.futures._base.CancelledError error
+                        try:
+                            self.log.debug('\x1b[1;32mrouter online\x1b[0m')
+                            await asyncio.wait([join_future])
+                        except Exception as e:
+                            self.log.critical('unexpected error while connecting to router: {}'.format(e))
 
-                    transport.close()
-                    continue
-                except CancelledError:
-                    try:
-                        await asyncio.wait([join_future])
+                        transport.close()
+                        continue
+                    except CancelledError:
+                        try:
+                            await asyncio.wait([join_future])
+                        except Exception as e:
+                            self.log.critical('unexpected error while connecting to router: {}'.format(e))
+                        break
                     except Exception as e:
-                        self.log.critical('unexpected error while connecting to router: {}'.format(e))
-                    break
-                except Exception as e:
-                    self.log.critical(traceback.format_exc())
-                    transport.close()
-                    break
+                        self.log.warning('\x1b[1;31mTransport lost: {}\x1b[0m'.format(e.__class__.__name__))
+                        #self.log.critical(traceback.format_exc())
+                        transport.close()
+                        break
 
         while True:
             self.session = None
@@ -1219,9 +1225,14 @@ class Misty():
                 break
 
             try:
+                # here is where WAMP does its busy-idle
                 loop.run_forever()
                 if self.session.close_reason:
-                    self.log.critical('session close reason: {}'.format(self.session.close_reason))
+                    self.log.warning('session close reason: {}'.format(self.session.close_reason))
+                    try:
+                        self.transport_copy.close()
+                    except:
+                        pass
             except Exception as e:
                 self.log.critical(traceback.format_exc())
 
@@ -1233,6 +1244,7 @@ class Misty():
         # cleanup
         try:
             loop.run_until_complete(asyncio.wait(tasks))
+            self.transport_copy.close()
         except:
             pass
 
@@ -1278,32 +1290,6 @@ class Misty():
         # we do have messages in queue but can't send them? or c) we ran so fast
         # that we haven't even connected to the router yet?
         self.wamp_eventloop.stop()
-
-
-    @staticmethod
-    def _hardware_setup(caller, channels):
-        """
-        channels:   a sequence of tuples in the form of (wire id, 'in' | 'out')
-
-        set up digital GPIO as IN or OUT per `channel' definitions.
-        definitions should be in BCM (wire-id) form, at least for now ;)
-        """
-
-        # NOTE. make sure you chown/chgrp however you need so the user running this script
-        # is able to read/write to /dev/gpiomem
-
-        caller.log.warn('\x1b[1;32mhardware setup Z\x1b[0m')
-
-        GPIO.setmode(GPIO.BCM)
-
-        IN  = [int(ch) for ch,dio in channels if dio.lower() == 'in']
-        OUT = [int(ch) for ch,dio in channels if dio.lower() == 'out']
-        caller.log.info('hardware setup for {}: {} set for input'.format(caller, IN))
-        caller.log.info('hardware setup for {}: {} set for output'.format(caller, OUT))
-
-        GPIO.setup(IN, GPIO.IN)
-        GPIO.setup(OUT, GPIO.OUT)
-        caller.log.info('hardware setup finished for {}'.format(caller))
 
 
     @staticmethod
