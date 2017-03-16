@@ -357,16 +357,14 @@ class _Component(ApplicationSession): # this is the Provider class
 
 
     def onLeave(self, details):
-        self.log.debug("ClientSession left: {}".format(details))
+        self.log.info("ClientSession left: {}".format(details))
         self.close_reason = details.reason
         if not self.close_reason in ('wamp.close.logout','wamp.close.normal'):
             self.log.warning('unexpected communication loss from router: {}'.format(self.close_reason))
 
 
     def onDisconnect(self):
-        print('clientSession disconnected')
-        super().onDisconnect()
-        #asyncio.get_event_loop().stop()
+        self.log.info('clientSession disconnected')
         self.event_loop.stop()
 
 
