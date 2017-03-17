@@ -181,7 +181,7 @@ class AuthorizerSession(ApplicationSession):
             color=['\x1b[1;31m','\x1b[1;32m'][perm]
             s='{}/{}{}\x1b[0m/{}'.format(session['authid'], color, action, uri)
             print(s)
-            return {'allow':perm, 'disclose':{'caller':True, 'publisher':True}}
+            return {'allow':perm, 'disclose':True}
 
         if not uri.startswith('org.blue_labs.misty.'):
             print('unknown URI prefix: {}'.format(uri))
