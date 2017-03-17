@@ -211,7 +211,11 @@ class _Component(ApplicationSession): # this is the Provider class
 
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
+            subscribers = yield from self.call('wamp.subscription.list_subscribers', sub_details)
+
             print('\x1b[1;32m{} subscribed to {}\x1b[0m'.format(subscriberid, topic['uri']))
+            print('topic: {}'.format(topic))
+            print('subscribers: {}'.format(subscribers))
 
             if subscriberid == self.sessionid:
                 # trigger an update of our internal zone knowledge, we intentionally don't
@@ -327,8 +331,9 @@ class _Component(ApplicationSession): # this is the Provider class
         self.__join_future.set_result(details)
 
         if not self._ldap:
-            self._ldap   = LDAP(self.cfg)
-            self.pi_node = cfg.get('provider', 'pi node')
+            self._ldap       = LDAP(self.cfg)
+            self.pi_node     = cfg.get('provider', 'pi node')
+            self.pi_node_b32 = b32encode(self.pi_node)
 
         # TODO, figure out how to get all existing subscriptions, why? if there are connected
         # clients, we'll ought to push out a notification that we've joined the realm
@@ -373,8 +378,12 @@ class _Component(ApplicationSession): # this is the Provider class
 
 
     def push_pub(self, uri, data, options={}):
+        if not 'exclude' in options:
+            options['exclude']=None
+
         if not 'acknowledge' in options:
             options['acknowledge']=True
+
         print('\x1b[1;37mpublishing to {}, options={}\x1b[0m {}'.format(uri,options,data))
         asyncio.shield(self.publish(uri, data, options=PublishOptions(**options)))
 
@@ -477,8 +486,8 @@ class _Component(ApplicationSession): # this is the Provider class
             specific data. we completely ignore data sent to us.
         '''
 
-        #print('args: {}'.format(args))
-        #print('kwargs: {}'.format(kwargs['details']))
+        print('args: {}'.format(args))
+        print('kwargs: {}'.format(kwargs['details']))
 
         detail    = kwargs['details']
         publisher = detail.publisher
@@ -527,14 +536,26 @@ class _Component(ApplicationSession): # this is the Provider class
             # specifically for each node/zone. this requires we build a character
             # safe topic out of the node name
             topic_node_name = b32encode(self.pi_node)
+            topic = 'org.blue_labs.misty.nodes'
 
             try:
-                exc = [s for s in self.topic_subscribers[topic] if not s == detail.caller]
-            except:         # sometimes this trigger comes in BEFORE the client subscription event fires which means
-                exc = None  # for the first subscriber, we don't know anything about this topic yet
+                self.log.info('publishing zones for poss subscribers: {}'.format(
+                    [s for s in self.topic_subscribers[topic] if not s == detail.caller]))
+            except:
+                pass
+
+            if args and args[0] == True:
+                options = {}
+            else:
+                try:
+                    exc = [s for s in self.topic_subscribers[topic] if not s == detail.caller]
+                except:         # sometimes this trigger comes in BEFORE the client subscription event fires which means
+                    exc = None  # for the first subscriber, we don't know anything about this topic yet
+                options = {} # it's not currently possible to get all active subscribers via
+                             # our router. so we can't include/exclude anyone {'exclude':exc, 'eligible':[publisher]}
 
             zones = [zone for zone in self.nodezones[self.pi_node]['zones']]
-            self.push_pub('org.blue_labs.misty.nodes', {topic_node_name:{'real name':self.pi_node, 'zones':zones}}, options={'exclude':exc, 'eligible':[publisher]})
+            self.push_pub(topic, {topic_node_name:{'real name':self.pi_node, 'zones':zones}}, options=options)
 
         yield from f__g(detail)
 
@@ -1137,6 +1158,7 @@ class Misty():
         self.client_version = cfg.get('main','__version__')
         self.join_timeout   = int(cfg.get('WAMP','join timeout'))
         self.pi_node        = cfg.get('provider', 'pi node')
+        self.pi_node_b32    = b32encode(self.pi_node)
 
         self._ldap          = LDAP(cfg)
 
@@ -1596,7 +1618,7 @@ class Misty():
                     if hasattr(self, 'session') and self.session:
                         __ = {z: zones[z]}
                         # we need to wait until session exists before publishing
-                        self.session.push_pub('org.blue_labs.misty.zones', __)
+                        self.session.push_pub('org.blue_labs.misty.node.{}.{}'.format(self.pi_node_b32,z), __)
             except:
                 traceback.print_exc()
 
