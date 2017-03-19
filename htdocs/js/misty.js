@@ -3,7 +3,7 @@
 // user editable part, if document.location.hostname is not correct
 // alter this accordingly, it should be wss:// + hostname + /ws
 var wsuri = 'wss://'+document.location.hostname+'/ws';
-var wamp_uri_base = 'org.blue_labs.misty.';
+var wamp_uri_prefix = 'org.blue_labs.misty';
 var realm = 'misty';
 
 // that's all. please leave the rest of this to me.
@@ -14,11 +14,7 @@ var __date__     = '2017-Mar-10 04:33z'
 var __license__  = 'Apache 2.0'
 
 var connection, session, principal, ticket,
-    wamp_subscriptions = {
-      'org.blue_labs.misty.nodes':subscribe_zones
-    };
-
-      //'org.blue_labs.misty.useradmin.set.attribute.result': wamp_cb_touchup,
+    wamp_subscriptions = {};
 
 function show_api_errors(errors) {
   var h = $.map(errors, function(v) {
@@ -89,6 +85,8 @@ $(document).ready(function(){
     $('#api-na-content').html('Waiting for API ...');
     session=ss; // track session
 
+    session.prefix('api', wamp_uri_prefix);
+
     // wait for the login to fully fade, then fill in our details
     // yeah -- it's the wrong way to do it
     function draw_details(details) {
@@ -99,7 +97,7 @@ $(document).ready(function(){
     }
 
     function get_role_details() {
-      session.call(wamp_uri_base+'role.lookup').then(
+      session.call('api:role.lookup').then(
         function(res) { draw_details(res); },
         function(err) { console.log(err);
         if (err.error === 'wamp.error.no_such_procedure') {
@@ -130,13 +128,13 @@ $(document).ready(function(){
 
     // keep trying this until the "no such procedure" error goes away
     function ponderous_attach() {
-      session.call(wamp_uri_base+'rpi.get.revision').then(
+      session.call('api:rpi.get.revision').then(
         function (res) {
           //console.log('rpi.get.revision called, got',res);
 
           // trigger [each] provider that is alive to send us their name and a list of zone IDs
           // they service
-          session.publish(wamp_uri_base+'nodes.research', [true]);
+          session.publish('api:nodes.research', [true]);
         },
         function (error) {
           console.log('error fetching rpi.get.revision',error);
@@ -275,12 +273,30 @@ function get_login_creds() {
   return {'u':u, 'p':p};
 }
 
+function subscribe(newsubs) {
+  var promises =[], p;
+
+  $.each(newsubs, function(_topic, _function) {
+    p = session.subscribe(_topic, _function);
+    promises.push(p);
+    wamp_subscriptions[_topic] = _function;
+  })
+
+  $.when(promises).done(function(foo) {
+    console.log('success for',foo);
+  }, function(foo) {
+    console.error(foo);
+  });
+
+}
+
 // we have to resubscribe to all of our subs if crossbar router is restarted
 // invisible WTFness evidenced by published events never appearing to us
 // surely our wamp module should handle that for us :P
 function resubscribe() {
   var promises = [], p;
   $.each(wamp_subscriptions, function(uri,f) {
+    //console.info('subscribing to',uri);
     p = session.subscribe(uri, f);
     promises.push(p);
   });
@@ -341,7 +357,7 @@ function page_bindings_wamplogin(){
         .text();
       var descrip = $(ev.target).val();
 
-      session.call(wamp_uri_base+'zone.set.attribute', [{'zone':zid, 'attribute':'zone-description', 'value':descrip},])
+      session.call('api:zone.set.attribute', [{'zone':zid, 'attribute':'zone-description', 'value':descrip},])
         .then(function(res) { $(ev.target).parent().text(descrip); },
               function(err) { console.log('result is err:', err); }
       );
@@ -467,31 +483,31 @@ function b32decode(subj) {
    check if all pi-nodes have been marked received. if so,
    regenerate all the html nodes.
    */
-var pi_nodes = {};
+var pi_nodes = {}, xx;
 
 function subscribe_zones(args) {
   var pi_node = Object.keys(args[0])[0],
       name    = args[0][pi_node]['real name'],
       zones   = args[0][pi_node]['zones'],
-      topic;
+      topic,
+      new_subs= {};
 
   console.log('zones to create:',zones);
 
   pi_nodes[name] = {state:'pending',
-                    htmlZones:undefined,
+                    zonesHTML:undefined,
                     zones:{},
                     timer:setTimeout(function(pn) {mark_received(pn);}, 10000, name)}; // set default
                                                             // timer to fire in 10s.
                                                             // if we have no permission to this
                                                             // object, we'll never get responses
-
   for (var z in zones) {
     var zn = zones[z];
     pi_nodes[name]['zones'][zn]={};
   }
 
   pi_nodes['aaaaa']={state:'received',
-                     htmlZones:undefined,
+                     zonesHTML:undefined,
                      zones:{
                       1:{state:'received',
                          'objectClass': ['mistyZone'],
@@ -515,18 +531,22 @@ function subscribe_zones(args) {
                      'b32uri': 'org.blue_labs.misty.node._____mjqwg23zmfzgiidhmfzmizloom______'};
 
   topic = wamp_uri_base+'node.'+pi_node;
-  //console.log('subscribing to',topic);
-  wamp_subscriptions[topic] = receive_pi_node_data;
+  if (!wamp_subscriptions.hasOwnProperty(topic)) {
+    new_subs[topic] = receive_pi_node_data;
+  }
 
   $.each(zones, function(i, zone) {
     topic = wamp_uri_base+'node.'+pi_node+'.'+zone;
-    //console.log('subscribing to',topic);
-    wamp_subscriptions[topic] = receive_zone_data;
+    if (!wamp_subscriptions.hasOwnProperty(topic)) {
+      new_subs[topic] = receive_zone_data;
+    }
   });
 
-  resubscribe();
+  if (Object.keys(new_subs).length > 0) {
+    subscribe(new_subs);
+  }
 
-/*  session.call(wamp_uri_base+'nodes.get', args[0]).then(
+/*  session.call('api:nodes.get', args[0]).then(
         function(res) { console.log('got noms',res); },
         function(err) { console.log(err);
         if (err.error === 'wamp.error.no_such_procedure') {
@@ -541,6 +561,7 @@ function subscribe_zones(args) {
 }
 
 function receive_pi_node_data(data) {
+  console.info('receive_pi_node_data()',data);
   data = data[0];
   var pi_node = data['real name'];
   //console.log('receive_pi_node_data('+pi_node+')',data);
@@ -567,6 +588,7 @@ function receive_pi_node_data(data) {
 
 // collect data and store in our local object
 function receive_zone_data(data) {
+  console.info('receive_zone_data()');
 
   // if this function is called with 'false', skip to checking pending status
   if (data !== false) {
@@ -628,86 +650,109 @@ function check_all_received() {
 }
 
 function redraw_zones() {
+  var _d, _ul, _li, _html, zi;
   console.log('redrawing zones');
-  pi_nodes['redraw timer'] = undefined;
+  delete pi_nodes['redraw timer'];
+
+  $.each(pi_nodes, function(pn, pn_dict) {
+    zi = Object.keys(pn_dict['zones']).sort();
+
+    _ul = $('<ul class="pi-nodes-list"></ul>');
+    $.each(zi, function(n, z) {
+      //console.log(pn, z, pn_dict['zones'][z]);
+      _li = generate_zone_html(z, pn_dict['zones'][z]);
+      _ul.append(_li);
+      //console.log(_li);
+    });
+
+    _d = $('<div class="pi-node"><p class="pi-node-cn">'+pn+'</p></div>');
+    _d.append(_ul);
+    $('div.pi-nodes-box').append(_d);
+  });
+
+
 }
 
-function generate_zone_html(data) {
+function generate_zone_html(zn, zone) {
   // if this zone doesn't already exist, create it
   // otherwise, ensure stats and indicators are updated
   // lastly, if mode of zone is 'deleted', then remove it
-  //console.log('generating zone',zone);
-  var zone = data[0];
-
-  console.log('generate_zone_html()',zone);
 
   var existing = $('span.zone-program-number').filter(function() {
     return $(this).text() == zone.zone;
   }).closest('.zone-program-entry');
 
-  if (zone['mode']==='deleted' && existing != undefined) {
-    $(existing).remove();
-    return;
+  //if (zone['mode']==='deleted' && existing != undefined) {
+  //  $(existing).remove();
+  //  return;
+  //}
+
+  var _html, restricted=false;
+  if (zone['zone-description'] == undefined) {
+    zone['zone-description'] = 'restricted';
+    restricted=true;
   }
 
-  var origin = $('div.zone-list-box > ul');
+  // create single zone LI element; grab the template and populate it
+  _html = document.querySelector('#zone-template');
+  _html.content.querySelector('.zone-program-number').textContent=zn;
+  _html.content.querySelector('.zone-program-description').textContent=zone['zone-description'];
+  _html = document.importNode(_html.content, true);
+  _html = $(_html);
 
-  if (existing.length > 0) {
-    // update existing
-    origin = existing;
-  } else {
-    var _html, clone;
-    // create zone
-    _html = document.querySelector('#zone-template');
-    _html.content.querySelector('.zone-program-number').textContent=zone.zone;
-    _html.content.querySelector('.zone-program-description').textContent=zone['zone-description'];
-    _html = document.importNode(_html.content, true);
-    _html = $(_html);
-    //document.querySelector('div.zone-list-box > ul').appendChild(clone);
+  // calculate icon positions by dividing equally and place on a point around the circle
+  // i've done this programatically so i don't have to recalculate positions every time
+  // i change icon count or circle location
+  var objs = _html.find('.circle a,.circle span')
+  $.each(objs, function(i,e) {
+    $(e).css({left:(50 -4 - 40*Math.cos(-0.5 * Math.PI - 2*(1/objs.length)*i*Math.PI)).toFixed(5) + "%",
+               top:(50 -4 + 40*Math.sin(-0.5 * Math.PI - 2*(1/objs.length)*i*Math.PI)).toFixed(5) + "%"
+              });
+  })
 
-    var objs = _html.find('.circle a,.circle span')
-    $.each(objs, function(i,e) {
-      $(e).css({left:(50 -4 - 40*Math.cos(-0.5 * Math.PI - 2*(1/objs.length)*i*Math.PI)).toFixed(5) + "%",
-                 top:(50 -4 + 40*Math.sin(-0.5 * Math.PI - 2*(1/objs.length)*i*Math.PI)).toFixed(5) + "%"
-                });
-    })
-    // find where to insert it based on numerical zone id
-    var zone_ids = {}, slice_pos = -1;
+  if (restricted===true) {
+    _html.find('.zone-program-description').addClass('pi-zone-restricted');
+  }
 
-    $.each($('.zone-program-number'), function(i, e) {
-      var zn = parseInt($(e).text());
-      zone_ids[i]=zn;
-      if (zn > zone.zone && (slice_pos==-1 || zn < slice_pos)) {
-        slice_pos = zn; console.log(zn, slice_pos);
-      }
-    });
 
-    if (slice_pos < 0) {
-      origin.append(_html);
-      origin = origin.children('li').last();
-    } else {
-      origin.children('li').first().before(_html);
-      origin = origin.filter('ul').find('li:nth-child('+slice_pos+')');
+  /*
+  // find where to insert it based on numerical zone id
+  var zone_ids = {}, slice_pos = -1;
+
+  // this no longer works with multiple zones, refactor
+  $.each($('.zone-program-number'), function(i, e) {
+    var zn = parseInt($(e).text());
+    zone_ids[i]=zn;
+    if (zn > zone.zone && (slice_pos==-1 || zn < slice_pos)) {
+      slice_pos = zn; console.log(zn, slice_pos);
     }
-  }
+  });
+
+  if (slice_pos < 0) {
+    origin.append(_html);
+    origin = origin.children('li').last();
+  } else {
+    origin.children('li').first().before(_html);
+    origin = origin.filter('ul').find('li:nth-child('+slice_pos+')');
+  }*/
 
   var e;
 
   /* zone enabled */
-  e = origin.find('.zone-program-status')
+  e = _html.find('.zone-program-status')
             .find('.enable-icon')
   if (zone.enabled===true) {
     e.addClass('status-active');
-    origin.find('.circle a[name=enable]')
+    _html.find('.circle a[name=enable]')
           .addClass('on');
   } else {
     e.removeClass('status-active');
-    origin.find('.circle a[name=enable]')
+    _html.find('.circle a[name=enable]')
           .removeClass('on');
   }
 
   /* scheduled per calendar */
-  e = origin.find('.zone-program-status')
+  e = _html.find('.zone-program-status')
                 .find('span.schedule-icon')
 
   if (zone.programmed===true) {
@@ -720,7 +765,7 @@ function generate_zone_html(data) {
   }
 
   /* zone is running */
-  e = origin.find('.zone-program-status')
+  e = _html.find('.zone-program-status')
             .find('.running-icon')
   if (zone.running===true) {
     e.addClass('status-active');
@@ -729,36 +774,38 @@ function generate_zone_html(data) {
   }
 
   /* zone manually activated */
-  e = origin.find('.zone-program-status')
+  e = _html.find('.zone-program-status')
             .find('.running-icon');
             console.log()
   if (zone['manual-on']===true) {
     e.addClass('status-active');
-    origin.find('.running-suspend').removeClass('on');
-    origin.find('.running-manual').addClass('on');
-    origin.find('.circle a[name=manual]')
+    _html.find('.running-suspend').removeClass('on');
+    _html.find('.running-manual').addClass('on');
+    _html.find('.circle a[name=manual]')
           .addClass('on');
   } else {
-    origin.find('.running-manual').removeClass('on');
-    origin.find('.circle a[name=manual]')
+    _html.find('.running-manual').removeClass('on');
+    _html.find('.circle a[name=manual]')
           .removeClass('on');
   }
 
   /* manually suppressed */
-  e = origin.find('.zone-program-status')
+  e = _html.find('.zone-program-status')
             .find('running-icon')
   if (zone['suspend-on']===true) {
     e.css({visibility:'visible'});
-    origin.find('.running-manual').removeClass('on');
-    origin.find('.running-suspend').addClass('on');
-    origin.find('.circle a[name=suspend]')
+    _html.find('.running-manual').removeClass('on');
+    _html.find('.running-suspend').addClass('on');
+    _html.find('.circle a[name=suspend]')
           .addClass('on');
   } else {
     e.css({visibility:'hidden'});
-    origin.find('.running-suspend').removeClass('on');
-    origin.find('.circle a[name=suspend]')
+    _html.find('.running-suspend').removeClass('on');
+    _html.find('.circle a[name=suspend]')
           .removeClass('on');
   }
+
+  return _html;
 }
 
 
@@ -808,7 +855,7 @@ function set_duration(callee, _this) {
   var state = !callee.hasClass('on');
 
   // set the duration on the currently running zone
-  session.call(wamp_uri_base+'zone.set.state', [{'toggle':callee.attr('name'), 'zone':zid, 'state':state, 'end-time':duration},])
+  session.call('api:zone.set.state', [{'toggle':callee.attr('name'), 'zone':zid, 'state':state, 'end-time':duration},])
     .then(function(res) { /*console.log('result is:', res);*/ },
           function(err) { console.log('result is err:', err); }
   );
@@ -822,7 +869,7 @@ function toggle_zone_enable(zid) {
                 .find('.enable-icon')
                 .hasClass('status-active');
 
-  session.call(wamp_uri_base+'zone.set.enable', [{'zone':zid, 'enabled':state},])
+  session.call('api:zone.set.enable', [{'zone':zid, 'enabled':state},])
     .then(function(res) { /*console.log('result is:', res);*/ },
           function(err) { console.log('result is err:', err); }
   );
@@ -838,7 +885,7 @@ function toggle_zone(zid, toggle) {
   if (state) {
     get_duration(e);
   } else {
-    session.call(wamp_uri_base+'zone.set.state', [{'toggle':toggle, 'zone':zid, 'state':false},])
+    session.call('api:zone.set.state', [{'toggle':toggle, 'zone':zid, 'state':false},])
       .then(function(res) { console.log('result is:', res); },
             function(err) { console.log('result is err:', err); }
     );
@@ -849,7 +896,7 @@ function delete_zone(zid) {
   var hellyes = confirm('Delete this zone?');
 
   if (hellyes === true) {
-    session.call(wamp_uri_base+'zone.delete', [{'zone':zid}])
+    session.call('api:zone.delete', [{'zone':zid}])
       .then(function(res) { /*console.log('result is:', res);*/ },
             function(err) { console.log('result is err:', err); }
     );
@@ -860,7 +907,7 @@ function get_zone_ids(cb) {
   var zids={}
   for (var n=0; n<=31; n++) { zids[n] = ''; }
 
-  session.call(wamp_uri_base+'zones.get.zone_ids')
+  session.call('api:zones.get.zone_ids')
       .then(function(res) {// console.log('result is:', res);
         $.each(res, function(n,t) {
           zids[t[0]]=t[1];
@@ -875,7 +922,7 @@ function get_wire_ids(cb) {
   var ids={}
   for (var n=0; n<=27; n++) { ids[n] = ''; }
 
-  session.call(wamp_uri_base+'zones.get.wire_ids')
+  session.call('api:zones.get.wire_ids')
       .then(function(res) { //console.log('result is:', res);
         cb(res);
       },
@@ -1057,7 +1104,7 @@ function add_zone() {
 }
 
 function save_new_zone(data, cb) {
-  session.call(wamp_uri_base+'zones.add', [data])
+  session.call('api:zones.add', [data])
     .then(function(res) { console.log('result is:',res);     cb(res); },
           function(err) { console.log('result is err:',err); cb(err); }
           );

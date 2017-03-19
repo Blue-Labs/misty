@@ -136,12 +136,36 @@ article, aside, details, figcaption, figure, footer, header, hgroup, nav, sectio
   padding-right:.5rem;
 }
 
-.page-box div.zone-list-box {
+.pi-nodes-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-box div.pi-node {
   order:2;
   flex:0 1 auto;
   align-self: auto;
   max-width: 45rem;
-  margin-left:.5rem;
+  margin-bottom: 1rem;
+  background-color: #112;
+}
+
+p.pi-node-cn {
+  font-size:1.5rem;
+  padding-left:.5rem;
+  padding: .25rem;
+  margin-left: .5rem;
+  margin-bottom: .25rem;
+}
+
+.pi-node ul {
+  padding-left:0;
+  margin:0 .5rem;
+}
+
+.pi-node-restricted, span.pi-zone-restricted {
+  border-color: darkred;
+  opacity: 0.2;
 }
 
 .title, .menu, .zone-map-box, .log-box {
@@ -192,11 +216,6 @@ article, aside, details, figcaption, figure, footer, header, hgroup, nav, sectio
 
 .zone-id-descrip-row { display:flex; }
 .zone-status-map-row { display:flex; padding-top:.25rem;}
-
-.zone-list-box ul {
-  padding-left:0;
-  margin:0 .5rem;
-}
 
 .zone-program-entry, .zone-program-number, .zone-program-description, .zone-program-status,
 .zone-program-map, .pi-node, .map-tools {
