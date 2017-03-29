@@ -90,6 +90,7 @@ txaio.use_asyncio()
 
 class LDAP():
     def __init__(self, cfg):
+        self.log         = txaio.make_logger()
         self.cfg         = cfg
         self.valid_names = _cfg_List(cfg, 'authentication', 'valid names')
         self.host        = cfg.get('authentication', 'host', fallback='127.0.0.1')
@@ -137,7 +138,7 @@ class LDAP():
                 time.sleep(1)
 
             except Exception as e:
-                print('LDAP error: {}'.format(e))
+                self.log.error('LDAP error: {}'.format(e))
                 raise ApplicationError('org.blue_labs.misty.ldap.error', e)
 
         self.ctx = ctx
@@ -190,32 +191,32 @@ class _Component(ApplicationSession): # this is the Provider class
 
     @asyncio.coroutine
     def meta_on_join(self, details, b):
-        print('meta_on_join {}, details: {}'.format(b, details))
+        self.log.debug('meta_on_join {}, details: {}'.format(b, details))
         #topic = yield self.call("wamp.subscription.get", b)
-        #print('create topic:',topic)
+        #self.log.debug('create topic:',topic)
         #yield self.publish('org.blue_labs.misty.zones.get_all', self.get_zones.get_all())
 
 
     @asyncio.coroutine
     def meta_on_create(self, details, b):
-        print('meta_on_create {}, details: {}'.format(b, details))
+        self.log.debug('meta_on_create {}, details: {}'.format(b, details))
         topic = yield from self.call("wamp.subscription.get", b)
-        print('create topic:',topic)
+        self.log.debug('create topic:',topic)
 
 
     # since session.call('wamp.subscription*') breaks no matter what method is tried, we have
     # to resort to this
     @asyncio.coroutine
     def meta_on_subscribe(self, subscriberid, sub_details, details):
-        print('meta_on_subscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
+        self.log.info('meta_on_subscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
 
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
             subscribers = yield from self.call('wamp.subscription.list_subscribers', sub_details)
 
-            print('\x1b[1;32m{} subscribed to {}\x1b[0m'.format(subscriberid, topic['uri']))
-            print('topic: {}'.format(topic))
-            print('subscribers: {}'.format(subscribers))
+            self.log.debug('\x1b[1;32m{} subscribed to {}\x1b[0m'.format(subscriberid, topic['uri']))
+            self.log.debug('topic: {}'.format(topic))
+            self.log.debug('subscribers: {}'.format(subscribers))
 
             if subscriberid == self.sessionid:
                 # trigger an update of our internal zone knowledge, we intentionally don't
@@ -224,7 +225,7 @@ class _Component(ApplicationSession): # this is the Provider class
                 return
 
         except Exception as e:
-          print('awwshit (it happens): {} {}'.format(e.__class__, e))
+          self.log.error('awwshit (it happens): {} {}'.format(e.__class__, e))
           traceback.print_exc()
 
         # for pi-node and zone channel topics, trigger a faked change so the new subscriber
@@ -237,24 +238,24 @@ class _Component(ApplicationSession): # this is the Provider class
             if pi_node == self.pi_node:
                 self._nodes_get(uri=topic['uri'], pi_node=pi_node, zone=zone, details=details)
         else:
-            print('undirected subscribe: {}'.format(topic))
+            self.log.warning('undirected subscribe: {}'.format(topic))
 
 
 
 
     @asyncio.coroutine
     def meta_on_unsubscribe(self, subscriberid, sub_details, details):
-        print('meta_on_unsubscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
+        self.log.info('meta_on_unsubscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
-            print('\x1b[1;32m{} unsubscribed from {}\x1b[0m'.format(subscriberid, topic['uri']))
+            self.log.info('\x1b[1;32m{} unsubscribed from {}\x1b[0m'.format(subscriberid, topic['uri']))
 
             if topic['uri'] in self.topic_subscribers and subscriberid in self.topic_subscribers[topic['uri']]:
               self.topic_subscribers[topic['uri']].remove(subscriberid)
         #except wamp.error.no_such_subscription:
-        #    print('nss')
+        #    self.log.info('nss')
         except Exception as e:
-            print(e.error)
+            self.log.info(e.error)
 
 
     """ keep for TZ conversion notes
@@ -309,7 +310,7 @@ class _Component(ApplicationSession): # this is the Provider class
         except Exception as e:
             traceback.print_exc()
 
-        print("ClientSession connected, joining realm <{}> with authid <{}>".format(realm if realm else 'not provided', authid))
+        self.log.debug("ClientSession connected, joining realm <{}> with authid <{}>".format(realm if realm else 'not provided', authid))
         try:
             self.join(realm, ['ticket'], authid)
         except Exception as e:
@@ -1759,7 +1760,7 @@ if __name__ == '__main__':
 
     irl = cfg.get('WAMP', 'site_irl')
     if not irl:
-        s = "section [main]; required config option '{}' not found".format('site_irl')
+        s = "section [WAMP]; required config option '{}' not found".format('site_irl')
 
     host,*port = (cfg['authentication']['host']).rsplit(':',1)
     port       = port and port[0] or '389'
