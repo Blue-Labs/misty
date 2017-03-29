@@ -120,11 +120,7 @@ $(document).ready(function(){
     }
 
     // set call back functions per uri
-    if (!(wamp_uri_base+'nodes' in wamp_subscriptions)) {
-      wamp_subscriptions[wamp_uri_base+'nodes'] = subscribe_zones;
-    }
-
-    resubscribe();
+    subscribe({'api:nodes':subscribe_zones});
 
     // keep trying this until the "no such procedure" error goes away
     function ponderous_attach() {
@@ -274,20 +270,22 @@ function get_login_creds() {
 }
 
 function subscribe(newsubs) {
-  var promises =[], p;
-
   $.each(newsubs, function(_topic, _function) {
-    p = session.subscribe(_topic, _function);
-    promises.push(p);
-    wamp_subscriptions[_topic] = _function;
+    if (!wamp_subscriptions.hasOwnProperty(_topic)) {
+      //console.log('subscribing to',_topic);
+      session.subscribe(_topic, _function)
+      .then(
+        function(subscription) {
+          //console.log('sub good',subscription);
+          wamp_subscriptions[_topic] = _function;
+        },
+        function(error) {
+          console.error('subscription failed',error);}
+       );
+    } else {
+      //console.log('already subscribed to',_topic)
+    }
   })
-
-  $.when(promises).done(function(foo) {
-    console.log('success for',foo);
-  }, function(foo) {
-    console.error(foo);
-  });
-
 }
 
 // we have to resubscribe to all of our subs if crossbar router is restarted
@@ -296,13 +294,13 @@ function subscribe(newsubs) {
 function resubscribe() {
   var promises = [], p;
   $.each(wamp_subscriptions, function(uri,f) {
-    //console.info('subscribing to',uri);
+    console.info('subscribing to',uri);
     p = session.subscribe(uri, f);
     promises.push(p);
   });
 
   $.when(promises).done(function(res,err,progress) {
-    //console.info(res,err,progress);
+    console.info(res,err,progress);
     if (err !== undefined ) {
       show_api_errors([err]);
     }
@@ -530,34 +528,15 @@ function subscribe_zones(args) {
                      'meta': {'node-description': 'Test test'},
                      'b32uri': 'org.blue_labs.misty.node._____mjqwg23zmfzgiidhmfzmizloom______'};
 
-  topic = wamp_uri_base+'node.'+pi_node;
-  if (!wamp_subscriptions.hasOwnProperty(topic)) {
-    new_subs[topic] = receive_pi_node_data;
-  }
+  topic = 'api:node.'+pi_node;
+  new_subs[topic]=receive_pi_node_data;
 
   $.each(zones, function(i, zone) {
-    topic = wamp_uri_base+'node.'+pi_node+'.'+zone;
-    if (!wamp_subscriptions.hasOwnProperty(topic)) {
-      new_subs[topic] = receive_zone_data;
-    }
+    topic = 'api:node.'+pi_node+'.'+zone;
+    new_subs[topic]=receive_zone_data;
   });
 
-  if (Object.keys(new_subs).length > 0) {
-    subscribe(new_subs);
-  }
-
-/*  session.call('api:nodes.get', args[0]).then(
-        function(res) { console.log('got noms',res); },
-        function(err) { console.log(err);
-        if (err.error === 'wamp.error.no_such_procedure') {
-            // if no callee registered to handle this, then reschedule
-            console.warn(err);
-          } else {
-            console.warn(err);
-            show_api_errors([err]);
-          }
-        }
-      ); */
+  subscribe(new_subs);
 }
 
 function receive_pi_node_data(data) {
