@@ -64,6 +64,7 @@ def _cfg_List(config, section, key):
 
 class LDAP():
     def __init__(self, cfg):
+        self.log         = txaio.make_logger()
         self.cfg         = cfg
         self.valid_names = _cfg_List(cfg, 'authentication', 'valid names')
         self.host        = cfg.get('authentication', 'host', fallback='127.0.0.1')
@@ -72,7 +73,6 @@ class LDAP():
         self.userdn      = cfg.get('authentication', 'userdn')
         self.username    = ''
         self.password    = ''
-        self.log         = txaio.make_logger()
 
 
     def retry_connect(self):
@@ -108,7 +108,6 @@ class LDAP():
                 time.sleep(1)
 
             except Exception as e:
-                # print so it's visible, crossbar likes to swallow things
                 self.log.error('LDAP error: {}'.format(e))
                 raise ApplicationError('org.blue_labs.misty.ldap.error', e)
 
@@ -226,6 +225,8 @@ class AuthenticatorSession(ApplicationSession):
                     principal['displayName'] = ''
                 if not 'department' in principal:
                     principal['department'] = ['']
+                if not 'title' in principal:
+                  principal['title'] = ''
 
                 if principal['jpegPhoto']:
                     bl = []
