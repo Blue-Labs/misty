@@ -452,11 +452,12 @@ function page_bindings_misty() {
     event.preventDefault();
 
     var zid = $(this).closest('li.zone-program-entry').find('.zone-program-number').text();
+    var b32_cn = $(this).closest('div.pi-node').find('.pi-node-cn').attr('b32_cn');
 
-    if (this.name === 'delete') { delete_zone(zid); }
-    if (this.name === 'enable') { toggle_zone_enable(zid); }
-    if (this.name === 'manual') { toggle_zone(zid, 'manual'); }
-    if (this.name === 'suspend') { toggle_zone(zid, 'suspend'); }
+    if (this.name === 'delete') { delete_zone(b32_cn, zid); }
+    if (this.name === 'enable') { toggle_zone_enable(b32_cn, zid); }
+    if (this.name === 'manual') { toggle_zone(b32_cn, zid, 'manual'); }
+    if (this.name === 'suspend') { toggle_zone(b32_cn, zid, 'suspend'); }
   });
 }
 
@@ -504,6 +505,7 @@ function subscribe_zones(args) {
     pi_nodes[name]['zones'][zn]={};
   }
 
+  /*
   pi_nodes['aaaaa']={state:'received',
                      zonesHTML:undefined,
                      zones:{
@@ -527,6 +529,7 @@ function subscribe_zones(args) {
                      'real name': 'aaaa test node',
                      'meta': {'node-description': 'Test test'},
                      'b32uri': 'org.blue_labs.misty.node._____mjqwg23zmfzgiidhmfzmizloom______'};
+  */
 
   topic = 'api:node.'+pi_node;
   new_subs[topic]=receive_pi_node_data;
@@ -556,18 +559,12 @@ function receive_pi_node_data(data) {
   // node should be marked as received when the timer fires
   clearTimeout(pi_nodes[pi_node]['timer']);
   pi_nodes[pi_node]['timer'] = setTimeout(function(pn) {mark_received(pn);}, 500, pi_node);
-
-  var pns = Object.keys(pi_nodes).sort();
-  for (var i in pns) {
-    //console.log(pi_nodes[pns[i]]);
-    // if the pi-node div doesn't exist, create it
-  }
 }
 
 
 // collect data and store in our local object
 function receive_zone_data(data) {
-  console.info('receive_zone_data()');
+  console.info('receive_zone_data()',data);
 
   // if this function is called with 'false', skip to checking pending status
   if (data !== false) {
@@ -592,15 +589,16 @@ function mark_received(pi_node) {
 
   pi_nodes[pi_node]['state'] = 'received';
 
-  clearTimeout(pi_nodes[pi_node]['timer']);
-  pi_nodes[pi_node]['timer'] = undefined;
-  console.log('cleared timeout for',pi_node);
+  try {
+    clearTimeout(pi_nodes[pi_node]['timer']);
+    delete pi_nodes[pi_node]['timer'];
+  } catch(e){};
 
   check_all_received();
 }
 
 function check_all_received() {
-  var finished = true;
+  var finished = true, imf;
 
   for (var pn in pi_nodes) {
     if (pi_nodes[pn]['state'] !== 'received') {
@@ -608,48 +606,70 @@ function check_all_received() {
       break;
     }
 
+    imf=true;
     for (var z in pi_nodes[pn]['zones']) {
       if (pi_nodes[pn]['zones'][z]['state'] !== 'received') {
         finished = false;
+        imf=false;
         break;
       }
     }
+
+    if (imf == true) {
+      try {
+        clearTimeout(pi_nodes[pn]['timer']);
+      } catch(e){};
+    }
+
   }
 
   if (finished === true) {
     // clear/reset a master timer on pi_nodes so we only redraw zone data once
     // no matter how many threads fired through here
-    var t = pi_nodes['redraw timer'];
-    if (t !== undefined) { clearTimeout(t); }
+    try {
+      clearTimeout(pi_nodes['redraw timer']);
+      delete pi_nodes['redraw timer'];
+    } catch(e) {};
 
     // we're not waiting on anything, we can set this short
-    pi_nodes['redraw timer'] = setTimeout(redraw_zones, 50);
+    pi_nodes['redraw timer'] = setTimeout(redraw_zones, 150);
   }
   return finished;
 }
 
 function redraw_zones() {
-  var _d, _ul, _li, _html, zi;
+  /*
+  try {
+    clearTimeout(pi_nodes['redraw timer']);
+    delete pi_nodes['redraw timer'];
+  } catch(e) {};
+  */
+
+  var _d, _dd=[], _ul, _li, _html, zi, b32_cn;
+
   console.log('redrawing zones');
-  delete pi_nodes['redraw timer'];
 
   $.each(pi_nodes, function(pn, pn_dict) {
+    if (pn == 'redraw timer') { return; }
+
+    console.log(pn,pn_dict);
     zi = Object.keys(pn_dict['zones']).sort();
 
     _ul = $('<ul class="pi-nodes-list"></ul>');
     $.each(zi, function(n, z) {
-      //console.log(pn, z, pn_dict['zones'][z]);
       _li = generate_zone_html(z, pn_dict['zones'][z]);
       _ul.append(_li);
-      //console.log(_li);
     });
 
-    _d = $('<div class="pi-node"><p class="pi-node-cn">'+pn+'</p></div>');
+    b32_cn = pn_dict['b32uri'].split('.')[4];
+    _d = $('<div class="pi-node"><p class="pi-node-cn" b32_cn="'+b32_cn+'">'+pn+'</p></div>');
     _d.append(_ul);
-    $('div.pi-nodes-box').append(_d);
+    _dd.push(_d);
   });
 
-
+  // we should do this better so we're not laggy waiting for nodes to finish sending us data.
+  // build and display zones as soon as they arrive
+  $('div.pi-nodes-box').empty().append(_dd);
 }
 
 function generate_zone_html(zn, zone) {
@@ -819,6 +839,7 @@ function get_duration(callee) {
   });
 }
 
+var tick;
 function set_duration(callee, _this) {
   var duration = $(_this).val(), mx;
   if (duration !== undefined && duration.length > 0 ) {
@@ -830,17 +851,21 @@ function set_duration(callee, _this) {
     if (mx === 'd') { duration *= 86400; }
   }
 
+  tick=_this;
+  console.log(_this);
+
   var zid = $(_this).closest('.zone-program-entry').find('.zone-program-number').text();
+  var b32_cn = $(this).closest('div.pi-node').find('.pi-node-cn').attr('b32_cn');
   var state = !callee.hasClass('on');
 
   // set the duration on the currently running zone
-  session.call('api:zone.set.state', [{'toggle':callee.attr('name'), 'zone':zid, 'state':state, 'end-time':duration},])
+  session.call('api:node.'+b32_cn+'.zone.set.state', [{'toggle':callee.attr('name'), 'zone':zid, 'state':state, 'end-time':duration},])
     .then(function(res) { /*console.log('result is:', res);*/ },
           function(err) { console.log('result is err:', err); }
   );
 }
 
-function toggle_zone_enable(zid) {
+function toggle_zone_enable(b32_cn, zid) {
   var state = !$('.zone-program-number')
                 .filter(function() {return $(this).text()==zid})
                 .closest('.zone-program-entry')
@@ -848,13 +873,13 @@ function toggle_zone_enable(zid) {
                 .find('.enable-icon')
                 .hasClass('status-active');
 
-  session.call('api:zone.set.enable', [{'zone':zid, 'enabled':state},])
+  session.call('api:node.'+b32_cn+'.zone.set.enable', [{'zone':zid, 'enabled':state},])
     .then(function(res) { /*console.log('result is:', res);*/ },
           function(err) { console.log('result is err:', err); }
   );
 }
 
-function toggle_zone(zid, toggle) {
+function toggle_zone(b32_cn, zid, toggle) {
   var e = $('.zone-program-number')
             .filter(function() {return $(this).text()==zid})
             .closest('.zone-program-entry')
@@ -864,18 +889,19 @@ function toggle_zone(zid, toggle) {
   if (state) {
     get_duration(e);
   } else {
-    session.call('api:zone.set.state', [{'toggle':toggle, 'zone':zid, 'state':false},])
+    console.log(toggle,zid);
+    session.call('api:node.'+b32_cn+'.zone.set.state', [{'toggle':toggle, 'zone':zid, 'state':false},])
       .then(function(res) { console.log('result is:', res); },
             function(err) { console.log('result is err:', err); }
     );
   }
 }
 
-function delete_zone(zid) {
+function delete_zone(b32_cn, zid) {
   var hellyes = confirm('Delete this zone?');
 
   if (hellyes === true) {
-    session.call('api:zone.delete', [{'zone':zid}])
+    session.call('api:node.'+b32_cn+'.zone.delete', [{'zone':zid}])
       .then(function(res) { /*console.log('result is:', res);*/ },
             function(err) { console.log('result is err:', err); }
     );
