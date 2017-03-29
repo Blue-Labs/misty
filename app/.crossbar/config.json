@@ -98,7 +98,8 @@
                                 {
                                     "uri": "org.blue_labs.misty.node.*",
                                     "allow": {
-                                        "publish": true
+                                        "publish": true,
+                                        "register": true
                                     },
                                     "disclose": {
                                         "caller": true,
