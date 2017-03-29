@@ -208,7 +208,7 @@ class _Component(ApplicationSession): # this is the Provider class
     # to resort to this
     @asyncio.coroutine
     def meta_on_subscribe(self, subscriberid, sub_details, details):
-        self.log.info('meta_on_subscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
+        self.log.debug('meta_on_subscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
 
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
@@ -238,17 +238,20 @@ class _Component(ApplicationSession): # this is the Provider class
             if pi_node == self.pi_node:
                 self._nodes_get(uri=topic['uri'], pi_node=pi_node, zone=zone, details=details)
         else:
-            self.log.warning('undirected subscribe: {}'.format(topic))
+            #try:
+            #    self.log.warning('undirected subscribe: {}'.format(topic))
+            #except:
+            print('undirected subscribe: {}'.format(topic))
 
 
 
 
     @asyncio.coroutine
     def meta_on_unsubscribe(self, subscriberid, sub_details, details):
-        self.log.info('meta_on_unsubscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
+        self.log.debug('meta_on_unsubscribe: sid:{}, sub_d:{}, d:{}'.format(subscriberid, sub_details, details))
         try:
             topic = yield from self.call("wamp.subscription.get", sub_details)
-            self.log.info('\x1b[1;32m{} unsubscribed from {}\x1b[0m'.format(subscriberid, topic['uri']))
+            self.log.debug('\x1b[1;32m{} unsubscribed from {}\x1b[0m'.format(subscriberid, topic['uri']))
 
             if topic['uri'] in self.topic_subscribers and subscriberid in self.topic_subscribers[topic['uri']]:
               self.topic_subscribers[topic['uri']].remove(subscriberid)
@@ -325,8 +328,8 @@ class _Component(ApplicationSession): # this is the Provider class
             raise Exception("Invalid authmethod {}".format(challenge.method))
 
 
-    @asyncio.coroutine
-    def onJoin(self, details):
+    #@asyncio.coroutine
+    async def onJoin(self, details):
         #print('ClientSession onJoin:             {}',details)
         self.sessionid = details.session
         self.__join_future.set_result(details)
@@ -335,20 +338,37 @@ class _Component(ApplicationSession): # this is the Provider class
             self._ldap       = LDAP(self.cfg)
             self.pi_node     = cfg.get('provider', 'pi node')
             self.pi_node_b32 = b32encode(self.pi_node)
+            self.CURIe       = 'org.blue_labs.misty.node.{}.'.format(self.pi_node_b32)
+
+
+        # set our CURIe
+        #   does not yet exist in autobahn-python
 
         # TODO, figure out how to get all existing subscriptions, why? if there are connected
         # clients, we'll ought to push out a notification that we've joined the realm
-        sublist = yield from self.call('wamp.subscription.list')
-        print('onjoin sublist:',sublist)
+        #sublist = yield from self.call('wamp.subscription.list')
+        #print('XXX onjoin sublist:',sublist)
 
-        yield from self.register(self, options=RegisterOptions(details_arg='detail'))
-        yield from self.subscribe(self.meta_on_join, 'wamp.subscription.on_join')
-        yield from self.subscribe(self.meta_on_subscribe, 'wamp.subscription.on_subscribe', options=SubscribeOptions(details_arg="details"))
-        yield from self.subscribe(self.meta_on_unsubscribe, 'wamp.subscription.on_unsubscribe', options=SubscribeOptions(details_arg="details"))
-        #yield from self.subscribe(self.meta_on_unsubscribe, 'wamp.subscription.on_unsubscribe', options=SubscribeOptions(details_arg="details"))
+        async def register_RPC(self, function, topic_short):
+            tshort = self.CURIe + topic_short
+            self.log.info('registering RPC: {}'.format(tshort))
+            await self.register(function, tshort, options=RegisterOptions(details_arg='detail'))
+
+        await self.register(self, options=RegisterOptions(details_arg='detail'))
 
         try:
-            res = yield from self.subscribe(self, options=SubscribeOptions(match="prefix", details_arg='details'))
+            await register_RPC(self, self.zone_set_state, 'zone.set.state')
+        except Exception as e:
+            print('we shit ourselves: {}'.format(e))
+
+
+        await self.subscribe(self.meta_on_join, 'wamp.subscription.on_join')
+        await self.subscribe(self.meta_on_subscribe, 'wamp.subscription.on_subscribe', options=SubscribeOptions(details_arg="details"))
+        await self.subscribe(self.meta_on_unsubscribe, 'wamp.subscription.on_unsubscribe', options=SubscribeOptions(details_arg="details"))
+        #await self.subscribe(self.meta_on_unsubscribe, 'wamp.subscription.on_unsubscribe', options=SubscribeOptions(details_arg="details"))
+
+        try:
+            res = await self.subscribe(self, options=SubscribeOptions(match="prefix", details_arg='details'))
             print("Subscribed {} procedure(s)".format(len(res)))
         except Exception as e:
             print("could not subscribe procedures: {}".format(e))
@@ -366,7 +386,10 @@ class _Component(ApplicationSession): # this is the Provider class
         self.log.info("ClientSession left: {}".format(details))
         self.close_reason = details.reason
         if not self.close_reason in ('wamp.close.logout','wamp.close.normal'):
-            self.log.warning('unexpected communication loss from router: {}'.format(self.close_reason))
+            if hasattr(self.log, 'warning'):
+                self.log.warning('unexpected communication loss from router: {}'.format(self.close_reason))
+            else:
+                self.log.warn('unexpected communication loss from router: {}'.format(self.close_reason))
 
 
     def onDisconnect(self):
@@ -616,7 +639,6 @@ class _Component(ApplicationSession): # this is the Provider class
         return True
 
 
-    @wamp.register('org.blue_labs.misty.zone.set.state')
     def zone_set_state(self, *args, **details):
         #print(args)
         d = args[0]
@@ -656,7 +678,9 @@ class _Component(ApplicationSession): # this is the Provider class
             ops['{}-end-time'.format(swap_toggle)] = (MODIFY_REPLACE, [])
 
         else:
-            if self.nodezones[zone].get('running'):
+            print(self.nodezones[self.pi_node]['zones'][zone])
+            print(ops)
+            if self.nodezones[self.pi_node]['zones'][zone].get('running'):
                 # state indicates OFF but zone is showing as running. clear the running flag
                 # this will have the effect of also terminating a calendar run, when manual is
                 # ended, if zone was started by calendar
@@ -675,6 +699,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
         zone['action'] = 'toggle'
         zone['key']    = toggle
+        zone[toggle]   = state
         self.q.async_q.put_nowait(zone)
         self.event.set()
 
@@ -1349,7 +1374,7 @@ class Misty():
                  print('got int zone, convert to dict')
                  zone = caller.nodezones[caller.pi_node]['zones'][zone]
 
-            print('do update with dict: {}'.format(zone))
+            print('do update to dict: {}'.format(zone))
 
             if update_wire_state:
                 state          = str(GPIO.input(int(zone['wire-id'])) == zone['logic-state-when-active']).upper()
@@ -1611,6 +1636,8 @@ class Misty():
                     zones[z]['action']     = 'calendar'
                     zones[z]['key']        = 'running'
 
+                    print('send-to-hardware: {}'.format(zones[z]))
+
                     self.q.async_q.put_nowait(zones[z])
                     self.event.set()
                     self.event.wait()
@@ -1691,7 +1718,8 @@ class Misty():
             except janus.AsyncQueueEmpty:
                 continue
 
-            print('received event: {} changing {}->{} for {}:{}'.format(z['action'],z['key'],z[z['key']],z['zone'],z['zone-description']))
+            print('received event: {} changing {}->{} for {}:{}'
+                .format(z['action'],z['key'],z[z['key']],z['zone'],z['zone-description']))
             #sys.stdout.flush()
 
             action = z['action']
