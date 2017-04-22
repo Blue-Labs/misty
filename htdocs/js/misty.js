@@ -124,6 +124,8 @@ $(document).ready(function(){
 
     // keep trying this until the "no such procedure" error goes away
     function ponderous_attach() {
+      subscribe({'api:node.online':node_online});
+      subscribe({'api:node.offline':node_offline});
       session.call('api:rpi.get.revision').then(
         function (res) {
           //console.log('rpi.get.revision called, got',res);
@@ -280,7 +282,7 @@ function subscribe(newsubs) {
           wamp_subscriptions[_topic] = _function;
         },
         function(error) {
-          console.error('subscription failed',error);}
+          console.error('subscription failed',error,_topic);}
        );
     } else {
       //console.log('already subscribed to',_topic)
@@ -450,14 +452,16 @@ function page_bindings_misty() {
 
   $(document).on('click', '.circle a', function(event) {
     event.preventDefault();
+    console.log(event);
+    console.log(this);
 
     var zid = $(this).closest('li.zone-program-entry').find('.zone-program-number').text();
     var b32_cn = $(this).closest('div.pi-node').find('.pi-node-cn').attr('b32_cn');
 
-    if (this.name === 'delete') { delete_zone(b32_cn, zid); }
-    if (this.name === 'enable') { toggle_zone_enable(b32_cn, zid); }
-    if (this.name === 'manual') { toggle_zone(b32_cn, zid, 'manual'); }
-    if (this.name === 'suspend') { toggle_zone(b32_cn, zid, 'suspend'); }
+    if (this.name === 'delete') { delete_zone(this, b32_cn, zid); }
+    if (this.name === 'enable') { toggle_zone_enable(this, b32_cn, zid); }
+    if (this.name === 'manual') { toggle_zone(this, b32_cn, zid, 'manual'); }
+    if (this.name === 'suspend') { toggle_zone(this, b32_cn, zid, 'suspend'); }
   });
 }
 
@@ -467,6 +471,14 @@ function b32encode(subj) {
 }
 
 function b32decode(subj) {
+}
+
+function node_online(data) {
+  console.log('node online',data);
+}
+
+function node_offline(data) {
+  console.log('node offline',data);
 }
 
 /* this function used to get all the zone data in one lump
@@ -485,9 +497,10 @@ function b32decode(subj) {
 var pi_nodes = {}, xx;
 
 function subscribe_zones(args) {
-  var pi_node = Object.keys(args[0])[0],
-      name    = args[0][pi_node]['real name'],
-      zones   = args[0][pi_node]['zones'],
+  var pi_node          = Object.keys(args[0])[0],
+      name             = args[0][pi_node]['real name'],
+      node_description = args[0][pi_node]['node-description'],
+      zones            = args[0][pi_node]['zones'],
       topic,
       new_subs= {};
 
@@ -495,6 +508,7 @@ function subscribe_zones(args) {
 
   pi_nodes[name] = {state:'pending',
                     zonesHTML:undefined,
+                    'node-description':node_description,
                     zones:{},
                     timer:setTimeout(function(pn) {mark_received(pn);}, 10000, name)}; // set default
                                                             // timer to fire in 10s.
@@ -543,7 +557,7 @@ function subscribe_zones(args) {
 }
 
 function receive_pi_node_data(data) {
-  console.info('receive_pi_node_data()',data);
+  console.info('receive_pi_node_data('+data[0]['real name']+')',data);
   data = data[0];
   var pi_node = data['real name'];
   //console.log('receive_pi_node_data('+pi_node+')',data);
@@ -564,7 +578,7 @@ function receive_pi_node_data(data) {
 
 // collect data and store in our local object
 function receive_zone_data(data) {
-  console.info('receive_zone_data()',data);
+  console.info('receive_zone_data('+data[0]['pi-node']+';'+data[0]['zone']+')',data);
 
   // if this function is called with 'false', skip to checking pending status
   if (data !== false) {
@@ -652,7 +666,7 @@ function redraw_zones() {
   $.each(pi_nodes, function(pn, pn_dict) {
     if (pn == 'redraw timer') { return; }
 
-    console.log(pn,pn_dict);
+    //console.log(pn,pn_dict);
     zi = Object.keys(pn_dict['zones']).sort();
 
     _ul = $('<ul class="pi-nodes-list"></ul>');
@@ -662,7 +676,7 @@ function redraw_zones() {
     });
 
     b32_cn = pn_dict['b32uri'].split('.')[4];
-    _d = $('<div class="pi-node"><p class="pi-node-cn" b32_cn="'+b32_cn+'">'+pn+'</p></div>');
+    _d = $('<div class="pi-node"><p class="pi-node-cn" b32_cn="'+b32_cn+'">'+pn_dict['node-description']+'</p></div>');
     _d.append(_ul);
     _dd.push(_d);
   });
@@ -810,6 +824,7 @@ function generate_zone_html(zn, zone) {
 
 /* input box has been made visible, wait for duration and disappear. if <cr> pressed within duration, save value */
 function get_duration(callee) {
+  console.log(callee);
   var _this = callee.closest('span').find('.get-duration');
   var _path = callee.closest('.zone-program-entry').find('.timeout-path');
 
@@ -854,9 +869,11 @@ function set_duration(callee, _this) {
   tick=_this;
   console.log(_this);
 
-  var zid = $(_this).closest('.zone-program-entry').find('.zone-program-number').text();
-  var b32_cn = $(this).closest('div.pi-node').find('.pi-node-cn').attr('b32_cn');
+  var zid = $(_this).closest('li.zone-program-entry').find('.zone-program-number').text();
+  var b32_cn = $(_this).closest('div.pi-node').find('.pi-node-cn').attr('b32_cn');
   var state = !callee.hasClass('on');
+
+  console.log(zid,b32_cn,state,callee.attr('name'),duration);
 
   // set the duration on the currently running zone
   session.call('api:node.'+b32_cn+'.zone.set.state', [{'toggle':callee.attr('name'), 'zone':zid, 'state':state, 'end-time':duration},])
@@ -865,9 +882,8 @@ function set_duration(callee, _this) {
   );
 }
 
-function toggle_zone_enable(b32_cn, zid) {
-  var state = !$('.zone-program-number')
-                .filter(function() {return $(this).text()==zid})
+function toggle_zone_enable(target, b32_cn, zid) {
+  var state = !$(target)
                 .closest('.zone-program-entry')
                 .find('.zone-program-status')
                 .find('.enable-icon')
@@ -879,9 +895,9 @@ function toggle_zone_enable(b32_cn, zid) {
   );
 }
 
-function toggle_zone(b32_cn, zid, toggle) {
-  var e = $('.zone-program-number')
-            .filter(function() {return $(this).text()==zid})
+function toggle_zone(target, b32_cn, zid, toggle) {
+  console.log(this);
+  var e = $(target)
             .closest('.zone-program-entry')
             .find('.circle a[name='+toggle+']'),
       state = !e.hasClass('on');
@@ -912,6 +928,7 @@ function get_zone_ids(cb) {
   var zids={}
   for (var n=0; n<=31; n++) { zids[n] = ''; }
 
+  console.error('need b32_cn here');
   session.call('api:zones.get.zone_ids')
       .then(function(res) {// console.log('result is:', res);
         $.each(res, function(n,t) {
@@ -927,6 +944,7 @@ function get_wire_ids(cb) {
   var ids={}
   for (var n=0; n<=27; n++) { ids[n] = ''; }
 
+  console.error('need b32_cn here');
   session.call('api:zones.get.wire_ids')
       .then(function(res) { //console.log('result is:', res);
         cb(res);
@@ -1109,7 +1127,8 @@ function add_zone() {
 }
 
 function save_new_zone(data, cb) {
-  session.call('api:zones.add', [data])
+  console.error('need b32_cn here');
+  session.call('api:zone.add', [data])
     .then(function(res) { console.log('result is:',res);     cb(res); },
           function(err) { console.log('result is err:',err); cb(err); }
           );
