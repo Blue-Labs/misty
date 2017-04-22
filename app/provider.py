@@ -4,10 +4,10 @@ This is the standalone provider for crossbar that provides all the RPCs and pub/
 operations. We ONLY use asyncio here, no twisted.
 """
 
-__version__  = '2.1'
+__version__  = '2.2'
 __author__   = 'David Ford <david@blue-labs.org>'
 __email__    = 'david@blue-labs.org'
-__date__     = '2017-Mar-9 1:39z'
+__date__     = '2017-Apr-2 3:42z'
 __license__  = 'Apache 2.0'
 
 # ubjson emits an ImportWarning warning so import it now before we turn on warnings (imported in autobahn wamp serializers)
@@ -222,6 +222,7 @@ class _Component(ApplicationSession): # this is the Provider class
                 # trigger an update of our internal zone knowledge, we intentionally don't
                 # exclude any clients so they get our zone knowledge as soon as we come alive
                 self.push_pub('org.blue_labs.misty.nodes.research', True, options={'exclude_me':False})
+
                 return
 
         except Exception as e:
@@ -340,7 +341,6 @@ class _Component(ApplicationSession): # this is the Provider class
             self.pi_node_b32 = b32encode(self.pi_node)
             self.CURIe       = 'org.blue_labs.misty.node.{}.'.format(self.pi_node_b32)
 
-
         # set our CURIe
         #   does not yet exist in autobahn-python
 
@@ -358,9 +358,14 @@ class _Component(ApplicationSession): # this is the Provider class
 
         try:
             await register_RPC(self, self.zone_set_state, 'zone.set.state')
+            await register_RPC(self, self.zone_set_enable, 'zone.set.enable')
+            await register_RPC(self, self.zone_set_attribute, 'zone.set.attribute')
+            await register_RPC(self, self._zones_add_zone, 'zone.add')
+            await register_RPC(self, self._zones_delete_zone, 'zone.delete')
+            await register_RPC(self, self._nodes_get, 'nodes.get')
         except Exception as e:
-            print('we shit ourselves: {}'.format(e))
-
+            print('unable to register RPC: {}'.format(e))
+            traceback.print_exc()
 
         await self.subscribe(self.meta_on_join, 'wamp.subscription.on_join')
         await self.subscribe(self.meta_on_subscribe, 'wamp.subscription.on_subscribe', options=SubscribeOptions(details_arg="details"))
@@ -384,6 +389,7 @@ class _Component(ApplicationSession): # this is the Provider class
 
     def onLeave(self, details):
         self.log.info("ClientSession left: {}".format(details))
+
         self.close_reason = details.reason
         if not self.close_reason in ('wamp.close.logout','wamp.close.normal'):
             if hasattr(self.log, 'warning'):
@@ -524,6 +530,12 @@ class _Component(ApplicationSession): # this is the Provider class
                 Misty._load_zone_data(self)
                 zones = self.nodezones[self.pi_node]['zones']
 
+                if publisher == self.sessionid:
+                    # now that we have data, tell clients we are online
+                    self.push_pub('org.blue_labs.misty.node.online', self.pi_node_b32)
+
+                #pprint.pprint(self.nodezones)
+
                 # discover current [actual] state
                 for z in sorted(zones):
                     zones[z]['running'] = self.rpi_hardware.pin(zones[z]['wire-id']).get_active()
@@ -579,12 +591,14 @@ class _Component(ApplicationSession): # this is the Provider class
                              # our router. so we can't include/exclude anyone {'exclude':exc, 'eligible':[publisher]}
 
             zones = [zone for zone in self.nodezones[self.pi_node]['zones']]
-            self.push_pub(topic, {topic_node_name:{'real name':self.pi_node, 'zones':zones}}, options=options)
+            self.push_pub(topic,
+                          {topic_node_name:{'real name':self.pi_node,
+                                            'zones':zones,
+                                            'node-description':self.nodezones[self.pi_node]['node-description']}},
+                          options=options)
 
         yield from f__g(detail)
 
-
-    @wamp.register('org.blue_labs.misty.node.get')
     def _nodes_get(self, *args, **kwargs):
         ''' This is READABLE information
         '''
@@ -609,7 +623,6 @@ class _Component(ApplicationSession): # this is the Provider class
         self.push_pub(uri, response)
 
 
-    @wamp.register('org.blue_labs.misty.zone.set.enable')
     def zone_set_enable(self, *args, **details):
         d = args[0]
 
@@ -706,7 +719,6 @@ class _Component(ApplicationSession): # this is the Provider class
         return True
 
 
-    @wamp.register('org.blue_labs.misty.zone.set.attribute')
     def zone_set_attribute(self, *args, **details):
         #print(args)
         d = args[0]
@@ -785,9 +797,10 @@ class _Component(ApplicationSession): # this is the Provider class
         return self._get_rpi_models()
 
 
+    """ is this needed?
     @wamp.register('org.blue_labs.misty.zones.get.zone_ids')
     def _zones_get_zone_ids(self, **args):
-        """
+        '''
         try:
             self._ldap.rsearch(base       =self.ldap_zone_dn_suffix,
                           scope      =LEVEL,
@@ -797,14 +810,16 @@ class _Component(ApplicationSession): # this is the Provider class
         except:
             traceback.print_exc()
             raise
-        """
+        '''
         ids = sorted([(int(e['attributes']['zone']),e['attributes']['zone-description']) for e in self.nodezones])
         return ids
+    """
 
 
+    """ sort of broken
     @wamp.register('org.blue_labs.misty.zones.get.wire_ids')
     def _zones_get_wire_ids(self, **args):
-        """
+        '''
         try:
             self._ldap.rsearch(base  = self.ldap_zone_dn_suffix,
                           scope      = LEVEL,
@@ -814,7 +829,7 @@ class _Component(ApplicationSession): # this is the Provider class
         except:
             traceback.print_exc()
             raise
-        """
+        '''
 
         # eventually make a function out of this
         # varies slightly depending on RPi version
@@ -917,9 +932,9 @@ class _Component(ApplicationSession): # this is the Provider class
 
         ids = sorted([int(z['attributes']['wire-id']) for z in self.nodezones])
         return [ids,rv[0],gpiomap[pin_map]]
+    """
 
 
-    @wamp.register('org.blue_labs.misty.zones.add')
     def _zones_add_zone(self, nz, **args):
         print(nz)
 
@@ -1019,7 +1034,6 @@ class _Component(ApplicationSession): # this is the Provider class
         return True
 
 
-    @wamp.register('org.blue_labs.misty.zone.delete')
     def _zones_delete_zone(self, nz, **args):
         print(nz)
 
@@ -1211,25 +1225,32 @@ class Misty():
 
 
     def wamp(self):
-        """ this runs the WAMP thread which is the Provider process
-        We use our own ApplicationRunner here which is almost an identical copy of
-        wamp.ApplicationRunner. The difference being that we need to:
-         a) explicitly get a new asyncio event loop because we aren't running
-            in the main thread - we'll get a RuntimeError: There is no current
-            event loop in thread <thread name>, and
-         b) don't set a signal handler for SIGTERM, also because we're not
-            running in the main thread
+        """ This is the WAMP thread which wraps the Provider process. We instantiate our own
+            ApplicationRunner here which is almost an identical copy of wamp.ApplicationRunner.
+            The difference being that we need to:
+
+             a) explicitly get a new asyncio event loop because we aren't running
+                in the main thread - we'll get a
+                  RuntimeError: There is no current event loop in thread <thread name>,
+                and:
+
+             b) don't set a signal handler for SIGTERM because we're not running in the main thread
+
+            Our ApplicationRunner will cleanly disconnect upon shutdown. If our connection is
+            unexpectedly lost, it'll try to reconnect.
         """
 
         isSecure, host, port, resource, path, params = parse_url(self.irl)
-        ssl = True
+
+        ssl         = True
         serializers = None
 
         loop = txaio.config.loop = asyncio.new_event_loop()
+
         self.wamp_eventloop = loop
         asyncio.set_event_loop(loop)
 
-        async def fuck(loop):
+        async def ApplicationRunnerSimile(loop):
 
             while True:
                 try:
@@ -1279,7 +1300,7 @@ class Misty():
         while True:
             self.session = None
 
-            tasks = [ asyncio.ensure_future(fuck(loop)), ]
+            tasks = [ asyncio.ensure_future(ApplicationRunnerSimile(loop)), ]
 
             try:
                 loop.run_until_complete(asyncio.wait(tasks))
@@ -1374,7 +1395,8 @@ class Misty():
                  print('got int zone, convert to dict')
                  zone = caller.nodezones[caller.pi_node]['zones'][zone]
 
-            print('do update to dict: {}'.format(zone))
+            print('update ldap with:')
+            pprint.pprint(zone)
 
             if update_wire_state:
                 state          = str(GPIO.input(int(zone['wire-id'])) == zone['logic-state-when-active']).upper()
@@ -1477,7 +1499,6 @@ class Misty():
         def _get_duration(s):
             m = re.fullmatch('(\d+)([dhms])\w*', s)
             if not m:
-                print('fuck, no match in {}'.format(s))
                 return False
             n = int(m.group(1))
             n *= {'d':86400, 'h':3600, 'm':60, 's':1}[m.group(2)]
@@ -1485,8 +1506,8 @@ class Misty():
 
 
         def _epoch_contains_now(z, begin, duration):
-            print('  zone {} epoch: {} with duration of {}'.format(z, begin.strftime('%m/%d-%H:%M'), duration))
-            now = datetime.datetime.now().replace(second=0, microsecond=0)
+            self.log.info('  zone {} epoch: {} with duration of {}'.format(z, begin.strftime('%m/%d-%H:%M'), duration))
+            now = datetime.datetime.now().replace(microsecond=0)
             end = begin + duration
 
             #print('now:   {}'.format(now))
@@ -1497,15 +1518,15 @@ class Misty():
                 begin -= datetime.timedelta(days=1)
                 end = begin+duration
 
-            b = begin.strftime('%m/%d-%H:%M')
-            n = now.strftime('%m/%d-%H:%M')
-            e = end.strftime('%m/%d-%H:%M')
+            b = begin.strftime('%m/%d-%H:%M:%S')
+            n = now.strftime('%m/%d-%H:%M:%S')
+            e = end.strftime('%m/%d-%H:%M:%S')
 
             if begin <= now < end:
-                print('    {}  \x1b[1;32m{}\x1b[0m  {}'.format(b,n,e))
+                self.log.info('    {}  \x1b[1;32m{}\x1b[0m  {}'.format(b,n,e))
                 return True
             else:
-                print('    {}  {}  {}'.format(b,n,e))
+                self.log.info('    {}  {}  {}'.format(b,n,e))
 
 
         event_duration=None
@@ -1521,7 +1542,7 @@ class Misty():
             if self._shutdown:
                 break
 
-            print('running calendar cycle')
+            self.log.info('running calendar cycle')
             self._load_zone_data(self)
             zones = self.nodezones[self.pi_node]['zones']
 
@@ -1530,37 +1551,37 @@ class Misty():
                 calendar_times=[]
                 # find any zones that should be on per manual/calendar/sensor. skip suspended
                 for z in sorted(zones):
-                    print('Check(zone={})'.format(z))
+                    self.log.info('Check(zone={})'.format(z))
 
                     if 'suspend-on' in zones[z] and zones[z]['suspend-on']:
-                        print('  suspended')
+                        self.log.info('  suspended')
                         continue
 
                     if not 'enabled' in zones[z]:
-                        print('  not enabled')
+                        self.log.info('  not enabled')
                         continue
 
                     if 'manual-on' in zones[z] and zones[z]['manual-on']:
                         running[z]=True
-                        print('  manually on')
+                        self.log.info('  manually on')
                         continue
 
                     # must be programmed for remaining modes
                     if not zones[z]['programmed']:
-                        print('  not programmed')
+                        self.log.info('  not programmed')
                         continue
 
-                    print('  {}'.format(zones[z]['mode']))
+                    self.log.info('  {}'.format(zones[z]['mode']))
 
                     if zones[z]['mode']=='static':
                         running[z]=True
-                        print('  always on')
+                        self.log.info('  always on')
                         continue
 
                     if zones[z]['mode'] == 'independent':
 
                         if _epoch_contains_now(z, _get_epoch(zones[z]['epoch']), _get_duration(zones[z]['duration'])):
-                            print('    epoch indicates: should be running')
+                            self.log.info('    epoch indicates: should be running')
                             running[z] = True
 
                     if zones[z]['mode'] in ('parallel','chained'):
@@ -1570,7 +1591,7 @@ class Misty():
 
                         if zones[z]['mode'] == 'parallel':
                             if _epoch_contains_now(parent, _get_epoch(zones[parent]['epoch']), _get_duration(zones[parent]['duration'])):
-                                print('    epoch of parent (parallel) indicates: should be running')
+                                self.log.info('    epoch of parent (parallel) indicates: should be running')
                                 running[z] = True
                         else:
                             pd = _get_duration(zones[parent]['duration'])
@@ -1580,7 +1601,7 @@ class Misty():
                                 pd += _get_duration(zones[parent]['duration'])
                             e  = _get_epoch(zones[parent]['epoch'])
                             if _epoch_contains_now(parent, e+pd, _get_duration(zones[z]['duration'])):
-                                print('    epoch of parent (chained) indicates: should be running')
+                                self.log.info('    epoch of parent (chained) indicates: should be running')
                                 running[z] = True
 
                     # need to implement sensor triggered, but there's no point
@@ -1589,9 +1610,9 @@ class Misty():
             except:
                 traceback.print_exc()
 
-            print('Zones that should be ON:')
+            self.log.info('Zones that should be ON:')
             for z in sorted(running):
-                print(' {:<2} {}'.format(z,zones[z]['zone-description']))
+                self.log.info(' {:<2} {}'.format(z,zones[z]['zone-description']))
 
             try:
                 # now, each zone should match their running state. if not, make corrections
@@ -1620,14 +1641,14 @@ class Misty():
                     is_active   = ['Off','Active'][is_active]
                     should_be   = ['Off','Active'][z in running]
 
-                    print('zone {}, wire-id {}; is {} and should be: {}'.format(
+                    self.log.info('zone {}, wire-id {}; is {} and should be: {}'.format(
                         z, wire_id, is_active, should_be))
                     if is_active == should_be: # zone hardware state is current with intended state
-                        #print('  zone is current')
+                        #self.log.info('  zone is current')
                         continue
 
                     # state doesn't match what it should
-                    print('  zone {} should be {}'.format(z, should_be))
+                    self.log.info('  zone {} should be {}'.format(z, should_be))
 
                     zones[z]['running'] = z in running
                     self._update_zone_in_ldap(self, zones[z])
@@ -1636,7 +1657,7 @@ class Misty():
                     zones[z]['action']     = 'calendar'
                     zones[z]['key']        = 'running'
 
-                    print('send-to-hardware: {}'.format(zones[z]))
+                    self.log.info('send-to-hardware: {}'.format(zones[z]))
 
                     self.q.async_q.put_nowait(zones[z])
                     self.event.set()
@@ -1685,7 +1706,7 @@ class Misty():
                 # we leave calendar entries for suspended zones in here in case
                 # a person unsuspends the zone and it starts running again
                 # before the end of the original duration
-                print('next event is at {}'.format(next_))
+                self.log.info('next event is at {}'.format(next_))
                 event_duration = (next_ - now).total_seconds()
             except:
                 traceback.print_exc()
@@ -1718,7 +1739,7 @@ class Misty():
             except janus.AsyncQueueEmpty:
                 continue
 
-            print('received event: {} changing {}->{} for {}:{}'
+            self.log.info('received event: {} changing {}->{} for {}:{}'
                 .format(z['action'],z['key'],z[z['key']],z['zone'],z['zone-description']))
             #sys.stdout.flush()
 
