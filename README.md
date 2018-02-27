@@ -26,8 +26,7 @@ My Pi nodes are built using Arch Linux, some are wired, some are wireless.
 * Authenticates users via LDAP account data
 * Stores all zone information in LDAP
 * Provider runs WAMP thread as background thread, secondary to main process
-* Web UI currently designed for single Pi node but back end supports
-  multiple. Updates to web UI in process
+* Web UI supports multiple nodes
 * Manual start/stop of a zone plus calendar schedule
 * Suspend and unsuspend of a zone
 * All activities require authenticated login
