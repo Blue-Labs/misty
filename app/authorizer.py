@@ -168,9 +168,11 @@ class AuthorizerSession(ApplicationSession):
             traceback.print_exc()
 
 
-    def authorize(self, session, uri, action):
+    def authorize(self, session, uri, action, options):
 
         default_permissions = {
+            'org.blue_labs.misty.node.online':{'subscribe':True},
+            'org.blue_labs.misty.node.offline':{'subscribe':True},
             'org.blue_labs.misty.nodes':{'subscribe':True},
             'org.blue_labs.misty.role.lookup':{'call':True},
             'org.blue_labs.misty.rpi.get.revision':{'call':True},
@@ -214,12 +216,14 @@ class AuthorizerSession(ApplicationSession):
                 if len(topic_parts)>2:
                      zone = topic_parts[2]
 
-                friendlyname = 'node.'+pi_node
+                friendlyname = 'node.['+pi_node+']'
                 if zone:
                      friendlyname +='.'+zone
 
                 self._ldap.rsearch(filter='(&(objectClass=mistyNode)(cn={}))'.format(pi_node),
                                    attributes=['manager-user','viewer-user'])
+                print('search result for {}'.format(friendlyname))
+                print(self._ldap.ctx.response)
 
                 # if 'manage-user' is present and authid is not in this list, user has RO access to modify pi-node
                 if len(self._ldap.ctx.response)>0:
@@ -227,9 +231,11 @@ class AuthorizerSession(ApplicationSession):
                    #print ('ldap node perms: {}'.format(perms))
                    mu = perms.get('manager-user')
                    vu = perms.get('viewer-user')
+                   #print('pi-node mu is: {}'.format(mu))
+                   #print('pi-node vu is: {}'.format(vu))
 
                    # test
-                   if zone in ('4','5'):
+                   if zone in ('4','5') and pi_node == 'backyard gardens':
                         mu=None
                         vu=None
 
@@ -253,17 +259,20 @@ class AuthorizerSession(ApplicationSession):
                         self._ldap.rsearch(filter='(&(objectClass=mistyZone)(zone={})(pi-node={}))'.format(zone,pi_node),
                                            attributes=['manager-user','viewer-user'])
                         perms = self._ldap.ctx.response[0]['attributes']
-                        #print('ldap zone perms: {}'.format(perms))
+                        print('ldap zone perms: {}'.format(perms))
                         mu = perms.get('manager-user')
                         vu = perms.get('viewer-user')
 
                         if mu and session['authid'] in mu:
+                            print('zone-specific mu is: {}'.format(mu))
                             return answer(uri, action, True, session)
                         elif vu and session['authid'] in vu:
                             # user has RO to this pi-node, this is a read only function
+                            print('zone-specific vu1 is: {}'.format(vu))
                             return answer(uri, action, True, session)
                         elif vu and not session['authid'] in vu:
                             # user doesn't have RW, VU is present without user specified. no access
+                            print('zone-specific vu2 is: {}'.format(vu))
                             return answer(uri, action, False, session)
 
                 # failed all ACLs
