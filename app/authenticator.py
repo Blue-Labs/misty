@@ -127,6 +127,7 @@ class LDAP():
 class AuthenticatorSession(ApplicationSession):
     @inlineCallbacks
     def onJoin(self, details):
+        self.log = txaio.make_logger()
         self.log.debug("WAMP-Ticket dynamic authenticator joined: {}".format(details))
 
         try:
