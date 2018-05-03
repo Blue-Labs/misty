@@ -433,8 +433,9 @@ class _Component(ApplicationSession): # this is the Provider class
         if not 'acknowledge' in options:
             options['acknowledge']=True
 
+        s2 = pprint.pformat(data, compact=True).replace('\n', '\n            ').lstrip()
         s = '\x1b[1;37mpublishing to:\n   uri:     {}\n   options: {}\x1b[0m\n   data:    {}\n'.format(
-            uri, options, pprint.pformat(data, compact=True))
+            uri, options, s2)
 
         sys.stdout.flush()
         print(s)
