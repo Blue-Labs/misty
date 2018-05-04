@@ -39,7 +39,7 @@ from ldap3.core.exceptions   import LDAPSessionTerminatedByServerError
 from ldap3.core.exceptions   import LDAPSocketReceiveError
 
 from dateutil                import parser as dateparser
-from pprint                  import pprint
+from pprint                  import pprint, pformat
 from base64                  import urlsafe_b64decode as dcode
 from twisted.internet.defer  import inlineCallbacks
 from autobahn.twisted.wamp   import ApplicationSession
@@ -223,7 +223,8 @@ class AuthorizerSession(ApplicationSession):
                 self._ldap.rsearch(filter='(&(objectClass=mistyNode)(cn={}))'.format(pi_node),
                                    attributes=['manager-user','viewer-user'])
                 print('search result for {}'.format(friendlyname))
-                print(self._ldap.ctx.response)
+                for e in self._ldap.ctx.response:
+                    print('   '+pformat(e, indent=4, compact=True))
 
                 # if 'manage-user' is present and authid is not in this list, user has RO access to modify pi-node
                 if len(self._ldap.ctx.response)>0:
