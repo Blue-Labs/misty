@@ -608,6 +608,8 @@ function mark_received(pi_node) {
     delete pi_nodes[pi_node]['timer'];
   } catch(e){};
 
+  console.log(pi_nodes);
+
   check_all_received();
 }
 
@@ -615,14 +617,21 @@ function check_all_received() {
   var finished = true, imf;
 
   for (var pn in pi_nodes) {
+    if (pn === 'redraw timer') { continue; }
+
+    //console.log('pn is',pn);
+    //console.log('checking ['+pn+'][state]: '+pi_nodes[pn]['state']);
     if (pi_nodes[pn]['state'] !== 'received') {
       finished = false;
+      //console.log(pn,'node !finished, breaking');
       break;
     }
 
     imf=true;
     for (var z in pi_nodes[pn]['zones']) {
+      //console.log('checking ['+pn+']['+z+'][state]: '+pi_nodes[pn]['zones'][z]['state']);
       if (pi_nodes[pn]['zones'][z]['state'] !== 'received') {
+        //console.log(pn,z,'nodezone !finished, breaking');
         finished = false;
         imf=false;
         break;
