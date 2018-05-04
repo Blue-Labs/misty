@@ -40,7 +40,7 @@ from ldap3.core.exceptions   import LDAPSessionTerminatedByServerError
 from ldap3.core.exceptions   import LDAPSocketReceiveError
 
 from dateutil                import parser as dateparser
-from pprint                  import pprint
+from pprint                  import pprint, pformat
 from base64                  import urlsafe_b64decode as dcode
 from twisted.internet.defer  import inlineCallbacks
 from autobahn.twisted.wamp   import ApplicationSession
@@ -297,7 +297,8 @@ class AuthenticatorSession(ApplicationSession):
 
             # crossbar/txaio still not able to handle formatted format strings that have braces in them... log.info("foo {}".format(somedictionary))
             # 2017-02-28T01:08:01-0500 [Router      17628] Unable to format event {'log_logger': <Logger 'autobahn.wamp.protocol.ApplicationSession'>, 'log_source': None, 'log_format': "WAMP-Ticket authentication success: {'realm': ['misty'], 'role': 'Provider', 'extra': {'roleAdmin': [], 'jpegPhoto': '<suppressed>', 'department': [], 'displayName': []}}", 'log_time': 1488262081.92916}: "'realm'"
-            self.log.info("WAMP-Ticket authentication success: {resp}", resp=resp)
+            print("WAMP-Ticket authentication success:")
+            print('    '+pformat(resp, indent=4))
             return res
 
         try:
